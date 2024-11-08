@@ -1,0 +1,10 @@
+# Existing entries
+.env
+
+# Attachments
+attachments/*
+!attachments/.gitkeep
+
+# Templates
+templates/*
+!templates/.gitkeep

@@ -1,0 +1,50 @@
+app:
+    base_url: 'http://localhost:3001/api/v1'
+
+auth:
+    # TODO: Implement identifier
+    # identifier:
+    #     email: true
+    #     username: true
+    require_email_verification: true
+    # TODO: Implement welcome email
+    # send_welcome_email: true
+    # TODO: Implement username format
+    # username_format:
+    #     min_length: 3
+    #     max_length: 32
+    #     allow_special: false
+    #     allow_numbers: true
+    password_strength:
+        min_length: 8
+        max_length: 128
+        require_uppercase: true
+        require_lowercase: true
+        require_numbers: true
+        require_special: true
+    jwt:
+        # TODO: Implement claims
+        # claims:
+        #     - sub
+        #     - user_id
+        #     - email
+        #     - username
+        #     - is_admin
+        #     - is_verified
+        #     - is_blocked
+        token_expiry:
+            auth: 1h
+            email_verification: 24h
+            password_reset: 1h
+
+mailer:
+    uri: 'http://localhost:3002/api/v1/mails'
+    auth:
+        enabled: false
+        header:
+            key: '' # Ex. 'Authorization'
+            value: '' # Ex. 'Bearer TOKEN'
+    from: '' # Ex. 'noreply@example.com'
+    subjects:
+        verification: 'Verify your email: {{.email}}'
+        reset: 'Password reset for: {{.email}}'

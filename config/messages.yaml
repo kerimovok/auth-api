@@ -1,0 +1,41 @@
+# Auth Messages
+auth:
+    success:
+        registration: 'Registration successful'
+        login: 'Login successful'
+        logout: 'Logout successful'
+        password_changed: 'Password changed successfully'
+        email_changed: 'Email changed successfully'
+        email_verified: 'Email verified successfully'
+        password_reset: 'Password reset successful'
+        password_reset_requested: 'If an account exists, a password reset email will be sent'
+
+    error:
+        invalid_credentials: 'Invalid credentials'
+        invalid_token: 'Invalid or expired token'
+        invalid_token_type: 'Invalid token type'
+        account_blocked: 'Account is blocked'
+        email_exists: 'Email already registered'
+        email_verification_required: 'Email verification required'
+        admin_required: 'Admin access required'
+        invalid_password: 'Invalid current password'
+        token_required: 'Token is required'
+
+# Validation Messages
+validation:
+    error:
+        invalid_request: 'Invalid request body'
+        password_strength:
+            min_length: 'Password must be at least %d characters long'
+            max_length: 'Password cannot be longer than %d characters'
+            require_uppercase: 'Password must contain at least one uppercase letter'
+            require_lowercase: 'Password must contain at least one lowercase letter'
+            require_numbers: 'Password must contain at least one number'
+            require_special: 'Password must contain at least one special character'
+
+# Server Messages
+server:
+    error:
+        internal: 'Internal server error'
+        database: 'Database error'
+        mail_service: 'Mail service error'
