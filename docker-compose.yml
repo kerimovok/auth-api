@@ -3,6 +3,8 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
+        ports:
+            - ${PORT}:${PORT}
         environment:
             - PORT=${PORT}
             - DB_HOST=${DB_HOST}
