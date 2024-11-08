@@ -7,9 +7,6 @@ import (
 )
 
 type Config struct {
-	App struct {
-		BaseURL string `yaml:"base_url"`
-	} `yaml:"app"`
 	Auth struct {
 		// Identifier struct {
 		// 	Email    bool `yaml:"email"`
@@ -41,7 +38,6 @@ type Config struct {
 		} `yaml:"jwt"`
 	} `yaml:"auth"`
 	Mailer struct {
-		URI  string `yaml:"uri"`
 		Auth struct {
 			Enabled bool `yaml:"enabled"`
 			Header  struct {

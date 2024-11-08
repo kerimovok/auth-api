@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 
 	"auth-api/.internal/config"
@@ -28,7 +29,7 @@ type MailerService struct {
 func NewMailerService(cfg *config.Config) *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
-		baseURL: cfg.Mailer.URI,
+		baseURL: os.Getenv("MAILER_URI"),
 		config:  cfg,
 	}
 }
@@ -82,7 +83,7 @@ func (m *MailerService) SendMail(req MailRequest) error {
 // Helper methods for specific email types
 func (m *MailerService) SendVerificationEmail(email, token string) error {
 	// Construct verification URL
-	verifyURL, err := url.Parse(m.config.App.BaseURL)
+	verifyURL, err := url.Parse(os.Getenv("BASE_URL"))
 	if err != nil {
 		return fmt.Errorf("failed to parse base URL: %w", err)
 	}
@@ -106,7 +107,7 @@ func (m *MailerService) SendVerificationEmail(email, token string) error {
 
 func (m *MailerService) SendPasswordResetEmail(email, token string) error {
 	// Construct reset URL
-	resetURL, err := url.Parse(m.config.App.BaseURL)
+	resetURL, err := url.Parse(os.Getenv("BASE_URL"))
 	if err != nil {
 		return fmt.Errorf("failed to parse base URL: %w", err)
 	}
