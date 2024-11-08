@@ -6,6 +6,7 @@ import (
 	"auth-api/.internal/models"
 	"auth-api/.internal/services"
 	"auth-api/.internal/utils"
+	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -38,6 +39,12 @@ type ChangePasswordRequest struct {
 type ChangeEmailRequest struct {
 	Password string `json:"password" validate:"required"`
 	NewEmail string `json:"newEmail" validate:"required,email"`
+}
+
+// UserInfo returns the current user's information
+func UserInfo(c *fiber.Ctx) error {
+	user := c.Locals("user").(models.User)
+	return utils.SuccessResponse(c, "", user)
 }
 
 // Register handles user registration
@@ -85,6 +92,7 @@ func Register(c *fiber.Ctx) error {
 		// Send verification email
 		mailer := services.NewMailerService(&config.AppConfig)
 		if err := mailer.SendVerificationEmail(user.Email, token.Token); err != nil {
+			log.Println("failed to send verification email: %w", err)
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.MailService, nil)
 		}
 	}
@@ -136,6 +144,51 @@ func Login(c *fiber.Ctx) error {
 	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.Login, fiber.Map{
 		"token": token.Token,
 	})
+}
+
+// ConfirmEmail handles email verification
+func ConfirmEmail(c *fiber.Ctx) error {
+	token := c.Query("token")
+	if token == "" {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.AppMessages.Auth.Error.TokenRequired, nil)
+	}
+
+	// Validate token
+	claims, err := utils.ValidateToken(token)
+	if err != nil {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.AppMessages.Auth.Error.InvalidToken, nil)
+	}
+
+	// Verify token type
+	if claims.TokenType != string(utils.EmailVerificationToken) {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.AppMessages.Auth.Error.InvalidTokenType, nil)
+	}
+
+	// Start a transaction
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Update user verification status
+	if err := tx.Model(&models.User{}).Where("id = ?", claims.UserID).Update("is_verified", true).Error; err != nil {
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	// Delete the used token
+	if err := tx.Where("token = ?", token).Delete(&models.Token{}).Error; err != nil {
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return utils.SuccessResponse(c, config.AppMessages.Auth.Success.EmailVerified, nil)
+	}
+
+	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.EmailVerified, nil)
 }
 
 // RequestPasswordReset initiates the password reset process
@@ -223,57 +276,6 @@ func ResetPassword(c *fiber.Ctx) error {
 	}
 
 	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.PasswordReset, nil)
-}
-
-// ConfirmEmail handles email verification
-func ConfirmEmail(c *fiber.Ctx) error {
-	token := c.Query("token")
-	if token == "" {
-		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.AppMessages.Auth.Error.TokenRequired, nil)
-	}
-
-	// Validate token
-	claims, err := utils.ValidateToken(token)
-	if err != nil {
-		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.AppMessages.Auth.Error.InvalidToken, nil)
-	}
-
-	// Verify token type
-	if claims.TokenType != string(utils.EmailVerificationToken) {
-		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.AppMessages.Auth.Error.InvalidTokenType, nil)
-	}
-
-	// Start a transaction
-	tx := database.DB.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// Update user verification status
-	if err := tx.Model(&models.User{}).Where("id = ?", claims.UserID).Update("is_verified", true).Error; err != nil {
-		tx.Rollback()
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
-	}
-
-	// Delete the used token
-	if err := tx.Where("token = ?", token).Delete(&models.Token{}).Error; err != nil {
-		tx.Rollback()
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return utils.SuccessResponse(c, config.AppMessages.Auth.Success.EmailVerified, nil)
-	}
-
-	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.EmailVerified, nil)
-}
-
-// UserInfo returns the current user's information
-func UserInfo(c *fiber.Ctx) error {
-	user := c.Locals("user").(models.User)
-	return utils.SuccessResponse(c, "", user)
 }
 
 // ChangePassword handles password change for authenticated users
