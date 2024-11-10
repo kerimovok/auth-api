@@ -83,16 +83,35 @@ func Register(c *fiber.Ctx) error {
 
 	// Generate verification token if required
 	if config.AppConfig.Auth.RequireEmailVerification {
+		// Start a transaction
+		tx := database.DB.Begin()
+		defer func() {
+			if r := recover(); r != nil {
+				tx.Rollback()
+			}
+		}()
+
+		// Delete any existing verification tokens
+		if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.EmailVerificationToken).Delete(&models.Token{}).Error; err != nil {
+			tx.Rollback()
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+		}
+
 		tokenService := services.NewTokenService()
 		token, err := tokenService.CreateEmailVerificationTokenForUser(user, c.Get("User-Agent"), c.IP())
 		if err != nil {
+			tx.Rollback()
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+		}
+
+		if err := tx.Commit().Error; err != nil {
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 		}
 
 		// Send verification email
 		mailer := services.NewMailerService(&config.AppConfig)
 		if err := mailer.SendVerificationEmail(user.Email, token.Token); err != nil {
-			log.Println("failed to send verification email: %w", err)
+			log.Printf("failed to send verification email: %v", err)
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.MailService, nil)
 		}
 	}
@@ -124,6 +143,20 @@ func Login(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusForbidden, config.AppMessages.Auth.Error.AccountBlocked, nil)
 	}
 
+	// Start a transaction
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Delete existing auth tokens for this user
+	if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.AuthToken).Delete(&models.Token{}).Error; err != nil {
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
 	// Create new token
 	tokenService := services.NewTokenService()
 	token, err := tokenService.CreateAuthTokenForUser(
@@ -132,12 +165,18 @@ func Login(c *fiber.Ctx) error {
 		c.IP(),
 	)
 	if err != nil {
+		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, err)
 	}
 
 	// Update last login time
 	now := time.Now()
-	if err := database.DB.Model(&user).Update("last_login_at", &now).Error; err != nil {
+	if err := tx.Model(&user).Update("last_login_at", &now).Error; err != nil {
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
@@ -206,16 +245,36 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 		return utils.SuccessResponse(c, config.AppMessages.Auth.Success.PasswordResetRequested, nil)
 	}
 
+	// Start a transaction
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Delete any existing password reset tokens
+	if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.PasswordResetToken).Delete(&models.Token{}).Error; err != nil {
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
 	// Generate password reset token
 	tokenService := services.NewTokenService()
 	token, err := tokenService.CreatePasswordResetTokenForUser(user, c.Get("User-Agent"), c.IP())
 	if err != nil {
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	if err := tx.Commit().Error; err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	// Send password reset email
 	mailer := services.NewMailerService(&config.AppConfig)
 	if err := mailer.SendPasswordResetEmail(user.Email, token.Token); err != nil {
+		log.Printf("failed to send password reset email: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.MailService, nil)
 	}
 
