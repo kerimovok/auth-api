@@ -94,7 +94,7 @@ func Register(c *fiber.Ctx) error {
 		}()
 
 		// Delete any existing verification tokens
-		if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.EmailVerificationToken).Delete(&models.Token{}).Error; err != nil {
+		if err := tx.Where("user_id = ? AND type = ?", user.ID, utils.EmailVerificationToken).Delete(&models.Token{}).Error; err != nil {
 			log.Printf("failed to delete verification tokens: %v", err)
 			tx.Rollback()
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
@@ -157,7 +157,7 @@ func Login(c *fiber.Ctx) error {
 	}()
 
 	// Delete existing auth tokens for this user
-	if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.AuthToken).Delete(&models.Token{}).Error; err != nil {
+	if err := tx.Where("user_id = ? AND type = ?", user.ID, utils.AuthToken).Delete(&models.Token{}).Error; err != nil {
 		log.Printf("failed to delete auth tokens: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
@@ -266,7 +266,7 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 	}()
 
 	// Delete any existing password reset tokens
-	if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.PasswordResetToken).Delete(&models.Token{}).Error; err != nil {
+	if err := tx.Where("user_id = ? AND type = ?", user.ID, utils.PasswordResetToken).Delete(&models.Token{}).Error; err != nil {
 		log.Printf("failed to delete password reset tokens: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
