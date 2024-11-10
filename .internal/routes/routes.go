@@ -24,5 +24,5 @@ func SetupRoutes(app *fiber.App) {
 	// Protected + Verified routes
 	verified := protected.Use(middleware.RequireVerification())
 	verified.Put("/change-password", handlers.ChangePassword)
-	verified.Post("/change-email", handlers.ChangeEmail)
+	verified.Put("/change-email", handlers.ChangeEmail)
 }
