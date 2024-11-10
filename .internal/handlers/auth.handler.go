@@ -68,6 +68,7 @@ func Register(c *fiber.Ctx) error {
 	// Hash password
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
+		log.Printf("failed to hash password: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
@@ -78,6 +79,7 @@ func Register(c *fiber.Ctx) error {
 	}
 
 	if result := database.DB.Create(&user); result.Error != nil {
+		log.Printf("failed to create user: %v", result.Error)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
@@ -93,6 +95,7 @@ func Register(c *fiber.Ctx) error {
 
 		// Delete any existing verification tokens
 		if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.EmailVerificationToken).Delete(&models.Token{}).Error; err != nil {
+			log.Printf("failed to delete verification tokens: %v", err)
 			tx.Rollback()
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 		}
@@ -100,11 +103,13 @@ func Register(c *fiber.Ctx) error {
 		tokenService := services.NewTokenService()
 		token, err := tokenService.CreateEmailVerificationTokenForUser(user, c.Get("User-Agent"), c.IP())
 		if err != nil {
+			log.Printf("failed to create verification token: %v", err)
 			tx.Rollback()
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 		}
 
 		if err := tx.Commit().Error; err != nil {
+			log.Printf("failed to commit transaction: %v", err)
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 		}
 
@@ -153,6 +158,7 @@ func Login(c *fiber.Ctx) error {
 
 	// Delete existing auth tokens for this user
 	if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.AuthToken).Delete(&models.Token{}).Error; err != nil {
+		log.Printf("failed to delete auth tokens: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
@@ -165,6 +171,7 @@ func Login(c *fiber.Ctx) error {
 		c.IP(),
 	)
 	if err != nil {
+		log.Printf("failed to create auth token: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, err)
 	}
@@ -172,11 +179,13 @@ func Login(c *fiber.Ctx) error {
 	// Update last login time
 	now := time.Now()
 	if err := tx.Model(&user).Update("last_login_at", &now).Error; err != nil {
+		log.Printf("failed to update last login time: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		log.Printf("failed to commit transaction: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
@@ -213,17 +222,20 @@ func ConfirmEmail(c *fiber.Ctx) error {
 
 	// Update user verification status
 	if err := tx.Model(&models.User{}).Where("id = ?", claims.UserID).Update("is_verified", true).Error; err != nil {
+		log.Printf("failed to update user verification status: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	// Delete the used token
 	if err := tx.Where("token = ?", token).Delete(&models.Token{}).Error; err != nil {
+		log.Printf("failed to delete used token: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		log.Printf("failed to commit transaction: %v", err)
 		return utils.SuccessResponse(c, config.AppMessages.Auth.Success.EmailVerified, nil)
 	}
 
@@ -255,6 +267,7 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 
 	// Delete any existing password reset tokens
 	if err := tx.Where("user_id = ? AND token_type = ?", user.ID, utils.PasswordResetToken).Delete(&models.Token{}).Error; err != nil {
+		log.Printf("failed to delete password reset tokens: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
@@ -263,11 +276,13 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 	tokenService := services.NewTokenService()
 	token, err := tokenService.CreatePasswordResetTokenForUser(user, c.Get("User-Agent"), c.IP())
 	if err != nil {
+		log.Printf("failed to create password reset token: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		log.Printf("failed to commit transaction: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
@@ -320,17 +335,20 @@ func ResetPassword(c *fiber.Ctx) error {
 
 	// Update password
 	if err := tx.Model(&models.User{}).Where("id = ?", claims.UserID).Update("password", hashedPassword).Error; err != nil {
+		log.Printf("failed to update password: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	// Delete the used token
 	if err := tx.Where("token = ?", req.Token).Delete(&models.Token{}).Error; err != nil {
+		log.Printf("failed to delete used token: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		log.Printf("failed to commit transaction: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
@@ -365,6 +383,7 @@ func ChangePassword(c *fiber.Ctx) error {
 	// Update password
 	result := database.DB.Model(&user).Update("password", hashedPassword)
 	if result.Error != nil {
+		log.Printf("failed to update password: %v", result.Error)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
 	}
 
