@@ -79,12 +79,12 @@ func (s *TokenService) ValidateToken(tokenString string, tokenType utils.TokenTy
 	return &token, nil
 }
 
-func (s *TokenService) RevokeToken(tokenID uint) error {
+func (s *TokenService) RevokeToken(tokenID uuid.UUID) error {
 	now := time.Now()
 	return s.db.Model(&models.Token{}).Where("id = ?", tokenID).Update("revoked_at", &now).Error
 }
 
-func (s *TokenService) RevokeAllUserTokens(userID uint, tokenType utils.TokenType) error {
+func (s *TokenService) RevokeAllUserTokens(userID uuid.UUID, tokenType utils.TokenType) error {
 	now := time.Now()
 	return s.db.Model(&models.Token{}).
 		Where("user_id = ? AND type = ? AND revoked_at IS NULL", userID, string(tokenType)).

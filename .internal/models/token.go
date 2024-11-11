@@ -8,7 +8,7 @@ import (
 
 type Token struct {
 	ID        uuid.UUID  `gorm:"type:uuid;default:uuid_generate_v4()" json:"id"`
-	UserID    uint       `gorm:"not null;index" json:"userId"`
+	UserID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"userId"`
 	Token     string     `gorm:"not null;uniqueIndex" json:"token"`
 	Type      string     `gorm:"not null" json:"type"` // auth, email_verification, password_reset
 	ExpiresAt time.Time  `gorm:"not null;index" json:"expiresAt"`
