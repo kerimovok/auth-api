@@ -32,13 +32,13 @@ type ResetPasswordRequest struct {
 }
 
 type ChangePasswordRequest struct {
-	OldPassword string `json:"old_password" validate:"required"`
-	NewPassword string `json:"new_password" validate:"required"`
+	OldPassword string `json:"oldPassword" validate:"required"`
+	NewPassword string `json:"newPassword" validate:"required"`
 }
 
 type ChangeEmailRequest struct {
 	Password string `json:"password" validate:"required"`
-	NewEmail string `json:"new_email" validate:"required,email"`
+	NewEmail string `json:"newEmail" validate:"required,email"`
 }
 
 // UserInfo returns the current user's information
