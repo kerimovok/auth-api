@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 type TokenType string
@@ -19,8 +20,8 @@ const (
 
 // TODO: Define claims based on config
 type Claims struct {
-	UserID    uint   `json:"user_id"`
-	TokenType string `json:"token_type"`
+	UserID    uuid.UUID `json:"userId"`
+	TokenType string    `json:"tokenType"`
 	jwt.RegisteredClaims
 }
 

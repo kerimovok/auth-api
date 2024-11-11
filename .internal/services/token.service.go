@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"gorm.io/gorm"
 )
 
@@ -21,7 +23,7 @@ func NewTokenService() *TokenService {
 	}
 }
 
-func (s *TokenService) CreateToken(userID uint, tokenType utils.TokenType, expiresAt time.Time, userAgent, ip string) (*models.Token, error) {
+func (s *TokenService) CreateToken(userID uuid.UUID, tokenType utils.TokenType, expiresAt time.Time, userAgent, ip string) (*models.Token, error) {
 	// Generate JWT token
 	claims := utils.Claims{
 		UserID:    userID,
