@@ -195,6 +195,7 @@ func Login(c *fiber.Ctx) error {
 
 	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.Login, fiber.Map{
 		"token": token.Token,
+		"user":  user,
 	})
 }
 
