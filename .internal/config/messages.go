@@ -17,6 +17,7 @@ type Messages struct {
 			EmailVerified          string `yaml:"email_verified"`
 			PasswordReset          string `yaml:"password_reset"`
 			PasswordResetRequested string `yaml:"password_reset_requested"`
+			AccountDeleted         string `yaml:"account_deleted"`
 		} `yaml:"success"`
 		Error struct {
 			InvalidCredentials        string `yaml:"invalid_credentials"`

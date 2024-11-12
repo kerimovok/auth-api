@@ -19,10 +19,12 @@ func SetupRoutes(app *fiber.App) {
 
 	// Protected routes
 	protected := api.Use(middleware.RequireAuth())
+	protected.Post("/logout", handlers.Logout)
 	protected.Get("/userinfo", handlers.UserInfo)
 
 	// Protected + Verified routes
 	verified := protected.Use(middleware.RequireVerification())
 	verified.Put("/change-password", handlers.ChangePassword)
 	verified.Put("/change-email", handlers.ChangeEmail)
+	verified.Delete("/account", handlers.DeleteAccount)
 }

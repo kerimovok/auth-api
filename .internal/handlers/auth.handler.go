@@ -41,6 +41,10 @@ type ChangeEmailRequest struct {
 	NewEmail string `json:"newEmail" validate:"required,email"`
 }
 
+type DeleteAccountRequest struct {
+	Password string `json:"password" validate:"required"`
+}
+
 // UserInfo returns the current user's information
 func UserInfo(c *fiber.Ctx) error {
 	user := c.Locals("user").(models.User)
@@ -435,4 +439,75 @@ func ChangeEmail(c *fiber.Ctx) error {
 	}
 
 	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.EmailChanged, nil)
+}
+
+// DeleteAccount handles account deletion for authenticated users
+func DeleteAccount(c *fiber.Ctx) error {
+	var req DeleteAccountRequest
+	if err := utils.ValidateRequest(c, &req); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.AppMessages.Validation.Error.InvalidRequest, err)
+	}
+
+	user := c.Locals("user").(models.User)
+
+	// Verify password
+	if !utils.CheckPassword(req.Password, user.Password) {
+		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.AppMessages.Auth.Error.InvalidPassword, nil)
+	}
+
+	// Start a transaction
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Delete all user tokens
+	if err := tx.Where("user_id = ?", user.ID).Delete(&models.Token{}).Error; err != nil {
+		log.Printf("failed to delete user tokens: %v", err)
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	// Delete user
+	if err := tx.Delete(&user).Error; err != nil {
+		log.Printf("failed to delete user: %v", err)
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("failed to commit transaction: %v", err)
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.AccountDeleted, nil)
+}
+
+// Logout handles user logout by revoking the auth token
+func Logout(c *fiber.Ctx) error {
+	token := c.Locals("token").(models.Token)
+
+	// Start a transaction
+	tx := database.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Revoke the current token
+	if err := tx.Model(&token).Update("revoked_at", time.Now()).Error; err != nil {
+		log.Printf("failed to revoke token: %v", err)
+		tx.Rollback()
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("failed to commit transaction: %v", err)
+		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	}
+
+	return utils.SuccessResponse(c, config.AppMessages.Auth.Success.Logout, nil)
 }
