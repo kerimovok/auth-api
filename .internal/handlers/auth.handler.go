@@ -488,7 +488,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 
 // Logout handles user logout by revoking the auth token
 func Logout(c *fiber.Ctx) error {
-	token := c.Locals("token").(models.Token)
+	token := c.Locals("token").(*models.Token)
 
 	// Start a transaction
 	tx := database.DB.Begin()
@@ -499,7 +499,7 @@ func Logout(c *fiber.Ctx) error {
 	}()
 
 	// Revoke the current token
-	if err := tx.Model(&token).Update("revoked_at", time.Now()).Error; err != nil {
+	if err := tx.Model(token).Update("revoked_at", time.Now()).Error; err != nil {
 		log.Printf("failed to revoke token: %v", err)
 		tx.Rollback()
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
