@@ -160,15 +160,17 @@ func Login(c *fiber.Ctx) error {
 		}
 	}()
 
-	// Delete existing auth tokens for this user
-	if err := tx.Where("user_id = ? AND type = ?", user.ID, utils.AuthToken).Delete(&models.Token{}).Error; err != nil {
-		log.Printf("failed to delete auth tokens: %v", err)
-		tx.Rollback()
-		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+	// Only delete existing tokens if concurrent logins are not allowed
+	tokenService := services.NewTokenService()
+	if !config.AppConfig.Auth.AllowConcurrentLogins {
+		if err := tokenService.RevokeUserAuthTokens(tx, user.ID); err != nil {
+			log.Printf("failed to delete auth tokens: %v", err)
+			tx.Rollback()
+			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.AppMessages.Server.Error.Internal, nil)
+		}
 	}
 
 	// Create new token
-	tokenService := services.NewTokenService()
 	token, err := tokenService.CreateAuthTokenForUser(
 		user,
 		c.Get("User-Agent"),

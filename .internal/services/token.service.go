@@ -137,3 +137,9 @@ func (s *TokenService) CreatePasswordResetTokenForUser(user models.User, userAge
 		ip,
 	)
 }
+
+// RevokeUserAuthTokens revokes all auth tokens for a user
+func (s *TokenService) RevokeUserAuthTokens(tx *gorm.DB, userID uuid.UUID) error {
+	return tx.Where("user_id = ? AND type = ?", userID, utils.AuthToken).
+		Delete(&models.Token{}).Error
+}

@@ -36,6 +36,7 @@ type Config struct {
 				PasswordReset     string `yaml:"password_reset"`
 			} `yaml:"token_expiry"`
 		} `yaml:"jwt"`
+		AllowConcurrentLogins bool `yaml:"allow_concurrent_logins"`
 	} `yaml:"auth"`
 	Mailer struct {
 		Auth struct {
