@@ -26,6 +26,9 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates
 
+# Create necessary directories
+RUN mkdir -p /app/config
+
 # Copy binary from builder
 COPY --from=builder /build/main .
 
