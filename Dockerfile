@@ -29,6 +29,8 @@ RUN apk add --no-cache ca-certificates
 # Copy binary from builder
 COPY --from=builder /build/main .
 
+# Copy config files
+COPY config/ /app/config/
 # Copy .env file
 COPY .env /app/
 
