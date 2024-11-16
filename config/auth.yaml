@@ -1,11 +1,19 @@
-verification:
-    required: true # When false, users can login without verifying their email
-    expiry: '24h' # Ex. '1h' | '1d' | '1w' | '1m' | '1y'
-    redirect_url: '' # Ex. 'https://example.com/verify'
-password_reset:
-    expiry: '1h'
+token:
+    auth:
+        expiry: '24h'
+        revoke_existing: false
+    verification:
+        expiry: '24h'
+        revoke_existing: true
+    password_reset:
+        expiry: '1h'
+        revoke_existing: true
+verification: true # When false, users can login without verifying their email
+redirect_urls:
+    verification: 'https://example.com/verify'
+    password_reset: 'https://example.com/reset'
 allow:
-    password_reset: true
+    # password_reset: true
     concurrent_logins: true # When false, previous tokens are revoked on login
 password_strength:
     min_length: 8
@@ -14,5 +22,3 @@ password_strength:
     require_lowercase: false
     require_numbers: false
     require_special: false
-jwt:
-    expiry: '1d' # Ex. '1h' | '1d' | '1w' | '1m' | '1y'

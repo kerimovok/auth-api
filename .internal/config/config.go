@@ -6,15 +6,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type TokenConfig struct {
+	Expiry         string `yaml:"expiry"`
+	RevokeExisting bool   `yaml:"revoke_existing"`
+}
+
 type AuthConfig struct {
-	Verification struct {
-		Required    bool   `yaml:"required"`
-		Expiry      string `yaml:"expiry"`
-		RedirectURL string `yaml:"redirect_url"`
-	} `yaml:"verification"`
-	PasswordReset struct {
-		Expiry string `yaml:"expiry"`
-	} `yaml:"password_reset"`
+	Token struct {
+		Auth          TokenConfig `yaml:"auth"`
+		Verification  TokenConfig `yaml:"verification"`
+		PasswordReset TokenConfig `yaml:"password_reset"`
+	} `yaml:"token"`
+	Verification bool `yaml:"verification"`
+	RedirectURLs struct {
+		Verification  string `yaml:"verification"`
+		PasswordReset string `yaml:"password_reset"`
+	} `yaml:"redirect_urls"`
 	Allow struct {
 		PasswordReset    bool `yaml:"password_reset"`
 		ConcurrentLogins bool `yaml:"concurrent_logins"`
@@ -27,9 +34,6 @@ type AuthConfig struct {
 		RequireNumbers   bool `yaml:"require_numbers"`
 		RequireSpecial   bool `yaml:"require_special"`
 	} `yaml:"password_strength"`
-	JWT struct {
-		Expiry string `yaml:"expiry"`
-	} `yaml:"jwt"`
 }
 
 type MailerConfig struct {
@@ -40,7 +44,11 @@ type MailerConfig struct {
 			Value string `yaml:"value"`
 		} `yaml:"header"`
 	} `yaml:"auth"`
-	From     string `yaml:"from"`
+	From      string `yaml:"from"`
+	Templates struct {
+		Verification string `yaml:"verification"`
+		Reset        string `yaml:"reset"`
+	} `yaml:"templates"`
 	Subjects struct {
 		Verification string `yaml:"verification"`
 		Reset        string `yaml:"reset"`
@@ -61,6 +69,7 @@ type MessagesConfig struct {
 			AccountDeleted         string `yaml:"account_deleted"`
 		} `yaml:"success"`
 		Error struct {
+			UserNotFound              string `yaml:"user_not_found"`
 			InvalidCredentials        string `yaml:"invalid_credentials"`
 			InvalidToken              string `yaml:"invalid_token"`
 			InvalidTokenType          string `yaml:"invalid_token_type"`
@@ -70,6 +79,7 @@ type MessagesConfig struct {
 			AdminRequired             string `yaml:"admin_required"`
 			InvalidPassword           string `yaml:"invalid_password"`
 			TokenRequired             string `yaml:"token_required"`
+			SamePassword              string `yaml:"same_password"`
 		} `yaml:"error"`
 	} `yaml:"auth"`
 	Validation struct {

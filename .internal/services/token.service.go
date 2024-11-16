@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"errors"
+
 	"gorm.io/gorm"
 )
 
@@ -23,57 +25,15 @@ func NewTokenService() *TokenService {
 	}
 }
 
-func (s *TokenService) CreateToken(userID uuid.UUID, tokenType utils.TokenType, expiresAt time.Time, userAgent, ip string) (*models.Token, error) {
-	// Generate JWT token
-	claims := utils.Claims{
-		UserID:    userID,
-		TokenType: string(tokenType),
-	}
-
-	tokenString, err := utils.GenerateToken(claims, time.Until(expiresAt))
-	if err != nil {
-		return nil, err
-	}
-
-	// Store token in database
-	token := &models.Token{
-		UserID:    userID,
-		Token:     tokenString,
-		Type:      string(tokenType),
-		ExpiresAt: expiresAt,
-		UserAgent: userAgent,
-		IP:        ip,
-	}
-
-	if err := s.db.Create(token).Error; err != nil {
-		return nil, err
-	}
-
-	return token, nil
-}
-
-func (s *TokenService) ValidateToken(tokenString string, tokenType utils.TokenType) (*models.Token, error) {
-	// First validate JWT
-	claims, err := utils.ValidateToken(tokenString)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check token type
-	if claims.TokenType != string(tokenType) {
-		return nil, fmt.Errorf("invalid token type")
-	}
-
-	// Find token in database
+func (s *TokenService) ValidateToken(tokenID uuid.UUID, tokenType utils.TokenType) (*models.Token, error) {
 	var token models.Token
-	err = s.db.Where("token = ? AND type = ?", tokenString, string(tokenType)).First(&token).Error
+	err := s.db.Where("id = ? AND type = ?", tokenID, string(tokenType)).First(&token).Error
 	if err != nil {
-		return nil, err
+		return nil, utils.WrapError("validate token", fmt.Errorf("token not found: %w", err))
 	}
 
-	// Check if token is valid
 	if !token.IsValid() {
-		return nil, fmt.Errorf("token is invalid or expired")
+		return nil, utils.WrapError("validate token", fmt.Errorf("token is invalid or expired"))
 	}
 
 	return &token, nil
@@ -81,64 +41,102 @@ func (s *TokenService) ValidateToken(tokenString string, tokenType utils.TokenTy
 
 func (s *TokenService) RevokeToken(tokenID uuid.UUID) error {
 	now := time.Now()
-	return s.db.Model(&models.Token{}).Where("id = ?", tokenID).Update("revoked_at", &now).Error
+	return s.db.Model(&models.Token{}).
+		Where("id = ? AND revoked_at IS NULL", tokenID).
+		Update("revoked_at", &now).Error
 }
 
 func (s *TokenService) RevokeAllUserTokens(userID uuid.UUID, tokenType utils.TokenType) error {
 	now := time.Now()
-	return s.db.Model(&models.Token{}).
+	result := s.db.Model(&models.Token{}).
 		Where("user_id = ? AND type = ? AND revoked_at IS NULL", userID, string(tokenType)).
-		Update("revoked_at", &now).Error
+		Update("revoked_at", &now)
+
+	// Ignore "record not found" errors
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return utils.WrapError("revoke tokens", result.Error)
+	}
+
+	return nil
 }
 
-// CreateAuthTokenForUser creates a new auth token with config-based expiry
+func (s *TokenService) RevokeAllUserTokensExcept(userID uuid.UUID, tokenType utils.TokenType, exceptTokenID uuid.UUID) error {
+	now := time.Now()
+	result := s.db.Model(&models.Token{}).
+		Where("user_id = ? AND type = ? AND id != ? AND revoked_at IS NULL",
+			userID, string(tokenType), exceptTokenID).
+		Update("revoked_at", &now)
+
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return utils.WrapError("revoke tokens", result.Error)
+	}
+
+	return nil
+}
+
+func (s *TokenService) createToken(user models.User, tokenType utils.TokenType, expiry time.Duration, userAgent, ip string) (*models.Token, error) {
+	token := &models.Token{
+		UserID:    user.ID,
+		Type:      string(tokenType),
+		ExpiresAt: time.Now().Add(expiry),
+		UserAgent: userAgent,
+		IP:        ip,
+	}
+
+	if err := s.db.Create(token).Error; err != nil {
+		return nil, utils.WrapError("create token", err)
+	}
+
+	return token, nil
+}
+
 func (s *TokenService) CreateAuthTokenForUser(user models.User, userAgent, ip string) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.Auth.JWT.Expiry)
+	expiry, err := time.ParseDuration(config.Auth.Token.Auth.Expiry)
 	if err != nil {
-		return nil, fmt.Errorf("invalid auth token expiry configuration: %w", err)
+		return nil, utils.WrapError("parse auth token expiry", err)
 	}
 
-	return s.CreateToken(
-		user.ID,
-		utils.AuthToken,
-		time.Now().Add(expiry),
-		userAgent,
-		ip,
-	)
-}
-
-func (s *TokenService) CreateEmailVerificationTokenForUser(user models.User, userAgent, ip string) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.Auth.Verification.Expiry)
-	if err != nil {
-		return nil, fmt.Errorf("invalid email verification token expiry configuration: %w", err)
+	if config.Auth.Token.Auth.RevokeExisting {
+		if err := s.RevokeAllUserTokens(user.ID, utils.AuthToken); err != nil {
+			return nil, utils.WrapError("revoke existing auth tokens", err)
+		}
 	}
 
-	return s.CreateToken(
-		user.ID,
-		utils.EmailVerificationToken,
-		time.Now().Add(expiry),
-		userAgent,
-		ip,
-	)
+	return s.createToken(user, utils.AuthToken, expiry, userAgent, ip)
 }
 
-func (s *TokenService) CreatePasswordResetTokenForUser(user models.User, userAgent, ip string) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.Auth.PasswordReset.Expiry)
+func (s *TokenService) CreateEmailVerificationToken(user models.User, userAgent, ip string) (*models.Token, error) {
+	expiry, err := time.ParseDuration(config.Auth.Token.Verification.Expiry)
 	if err != nil {
-		return nil, fmt.Errorf("invalid password reset token expiry configuration: %w", err)
+		return nil, utils.WrapError("parse verification token expiry", err)
 	}
 
-	return s.CreateToken(
-		user.ID,
-		utils.PasswordResetToken,
-		time.Now().Add(expiry),
-		userAgent,
-		ip,
-	)
+	if config.Auth.Token.Verification.RevokeExisting {
+		if err := s.RevokeAllUserTokens(user.ID, utils.EmailVerificationToken); err != nil {
+			return nil, utils.WrapError("revoke existing verification tokens", err)
+		}
+	}
+
+	return s.createToken(user, utils.EmailVerificationToken, expiry, userAgent, ip)
 }
 
-// RevokeUserAuthTokens revokes all auth tokens for a user
-func (s *TokenService) RevokeUserAuthTokens(tx *gorm.DB, userID uuid.UUID) error {
-	return tx.Where("user_id = ? AND type = ?", userID, utils.AuthToken).
+func (s *TokenService) CreatePasswordResetToken(user models.User, userAgent, ip string) (*models.Token, error) {
+	expiry, err := time.ParseDuration(config.Auth.Token.PasswordReset.Expiry)
+	if err != nil {
+		return nil, utils.WrapError("parse password reset token expiry", err)
+	}
+
+	if config.Auth.Token.PasswordReset.RevokeExisting {
+		if err := s.RevokeAllUserTokens(user.ID, utils.PasswordResetToken); err != nil {
+			return nil, utils.WrapError("revoke existing password reset tokens", err)
+		}
+	}
+
+	return s.createToken(user, utils.PasswordResetToken, expiry, userAgent, ip)
+}
+
+// CleanupExpiredTokens removes expired and revoked tokens
+func (s *TokenService) CleanupExpiredTokens() error {
+	return s.db.Where("expires_at < ? OR revoked_at IS NOT NULL", time.Now()).
 		Delete(&models.Token{}).Error
 }

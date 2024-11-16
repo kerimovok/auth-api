@@ -12,6 +12,7 @@ auth:
         account_deleted: 'Account deleted successfully'
 
     error:
+        user_not_found: 'User not found'
         invalid_credentials: 'Invalid credentials'
         invalid_token: 'Invalid or expired token'
         invalid_token_type: 'Invalid token type'
@@ -21,6 +22,7 @@ auth:
         admin_required: 'Admin access required'
         invalid_password: 'Invalid current password'
         token_required: 'Token is required'
+        same_password: 'New password cannot be the same as the current password'
 
 # Validation Messages
 validation:

@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
 
 	"auth-api/.internal/config"
+	"auth-api/.internal/models"
+	"auth-api/.internal/utils"
 )
 
 type MailRequest struct {
@@ -23,35 +24,28 @@ type MailRequest struct {
 type MailerService struct {
 	client  *http.Client
 	baseURL string
+	appURL  string
 }
 
 func NewMailerService() *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
 		baseURL: os.Getenv("MAILER_URI"),
+		appURL:  os.Getenv("BASE_URL"),
 	}
 }
 
 func (m *MailerService) SendMail(req MailRequest) error {
-	// Set from address if not provided
-	if req.From == "" {
-		req.From = config.Mailer.From
-	}
-
-	// Convert request to JSON
-	jsonData, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("failed to marshal mail request: %w", err)
+	// Prepare request body
+	body := new(bytes.Buffer)
+	if err := json.NewEncoder(body).Encode(req); err != nil {
+		return utils.WrapError("encode mail request", err)
 	}
 
 	// Create HTTP request
-	httpReq, err := http.NewRequest(
-		"POST",
-		m.baseURL,
-		bytes.NewBuffer(jsonData),
-	)
+	httpReq, err := http.NewRequest(http.MethodPost, m.baseURL, body)
 	if err != nil {
-		return fmt.Errorf("failed to create mail request: %w", err)
+		return utils.WrapError("create mail request", err)
 	}
 
 	// Set headers
@@ -66,63 +60,54 @@ func (m *MailerService) SendMail(req MailRequest) error {
 	// Send request
 	resp, err := m.client.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("failed to send mail request: %w", err)
+		return utils.WrapError("send mail request", err)
 	}
 	defer resp.Body.Close()
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("mail service returned non-200 status: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("mail service returned status %d: %s", resp.StatusCode, body)
 	}
 
 	return nil
 }
 
 // Helper methods for specific email types
-func (m *MailerService) SendVerificationEmail(email, token string) error {
-	// Construct verification URL
-	verifyURL, err := url.Parse(os.Getenv("BASE_URL"))
-	if err != nil {
-		return fmt.Errorf("failed to parse base URL: %w", err)
-	}
-	verifyURL.Path = path.Join(verifyURL.Path, "confirm-email")
-	q := verifyURL.Query()
-	q.Set("token", token)
-	verifyURL.RawQuery = q.Encode()
+func (m *MailerService) SendVerificationEmail(email string, token *models.Token) error {
+	verifyURL := fmt.Sprintf("%s?token=%s",
+		config.Auth.RedirectURLs.Verification,
+		token.ID.String(),
+	)
 
 	return m.SendMail(MailRequest{
 		From:     config.Mailer.From,
 		To:       email,
 		Subject:  config.Mailer.Subjects.Verification,
-		Template: "confirm-email",
+		Template: config.Mailer.Templates.Verification,
 		Data: map[string]interface{}{
 			"subject": config.Mailer.Subjects.Verification,
 			"email":   email,
-			"url":     verifyURL.String(),
+			"url":     verifyURL,
 		},
 	})
 }
 
-func (m *MailerService) SendPasswordResetEmail(email, token string) error {
-	// Construct reset URL
-	resetURL, err := url.Parse(os.Getenv("BASE_URL"))
-	if err != nil {
-		return fmt.Errorf("failed to parse base URL: %w", err)
-	}
-	resetURL.Path = path.Join(resetURL.Path, "reset-password")
-	q := resetURL.Query()
-	q.Set("token", token)
-	resetURL.RawQuery = q.Encode()
+func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token) error {
+	resetURL := fmt.Sprintf("%s?token=%s",
+		config.Auth.RedirectURLs.PasswordReset,
+		token.ID.String(),
+	)
 
 	return m.SendMail(MailRequest{
 		From:     config.Mailer.From,
 		To:       email,
 		Subject:  config.Mailer.Subjects.Reset,
-		Template: "reset-password",
+		Template: config.Mailer.Templates.Reset,
 		Data: map[string]interface{}{
 			"subject": config.Mailer.Subjects.Reset,
 			"email":   email,
-			"url":     resetURL.String(),
+			"url":     resetURL,
 		},
 	})
 }
