@@ -23,21 +23,19 @@ type MailRequest struct {
 type MailerService struct {
 	client  *http.Client
 	baseURL string
-	config  *config.Config
 }
 
-func NewMailerService(cfg *config.Config) *MailerService {
+func NewMailerService() *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
 		baseURL: os.Getenv("MAILER_URI"),
-		config:  cfg,
 	}
 }
 
 func (m *MailerService) SendMail(req MailRequest) error {
 	// Set from address if not provided
 	if req.From == "" {
-		req.From = m.config.Mailer.From
+		req.From = config.Mailer.From
 	}
 
 	// Convert request to JSON
@@ -58,10 +56,10 @@ func (m *MailerService) SendMail(req MailRequest) error {
 
 	// Set headers
 	httpReq.Header.Set("Content-Type", "application/json")
-	if m.config.Mailer.Auth.Enabled {
+	if config.Mailer.Auth.Enabled {
 		httpReq.Header.Set(
-			m.config.Mailer.Auth.Header.Key,
-			m.config.Mailer.Auth.Header.Value,
+			config.Mailer.Auth.Header.Key,
+			config.Mailer.Auth.Header.Value,
 		)
 	}
 
@@ -93,12 +91,12 @@ func (m *MailerService) SendVerificationEmail(email, token string) error {
 	verifyURL.RawQuery = q.Encode()
 
 	return m.SendMail(MailRequest{
-		From:     m.config.Mailer.From,
+		From:     config.Mailer.From,
 		To:       email,
-		Subject:  m.config.Mailer.Subjects.Verification,
+		Subject:  config.Mailer.Subjects.Verification,
 		Template: "confirm-email",
 		Data: map[string]interface{}{
-			"subject": m.config.Mailer.Subjects.Verification,
+			"subject": config.Mailer.Subjects.Verification,
 			"email":   email,
 			"url":     verifyURL.String(),
 		},
@@ -117,12 +115,12 @@ func (m *MailerService) SendPasswordResetEmail(email, token string) error {
 	resetURL.RawQuery = q.Encode()
 
 	return m.SendMail(MailRequest{
-		From:     m.config.Mailer.From,
+		From:     config.Mailer.From,
 		To:       email,
-		Subject:  m.config.Mailer.Subjects.Reset,
+		Subject:  config.Mailer.Subjects.Reset,
 		Template: "reset-password",
 		Data: map[string]interface{}{
-			"subject": m.config.Mailer.Subjects.Reset,
+			"subject": config.Mailer.Subjects.Reset,
 			"email":   email,
 			"url":     resetURL.String(),
 		},

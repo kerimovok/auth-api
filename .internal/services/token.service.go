@@ -93,8 +93,7 @@ func (s *TokenService) RevokeAllUserTokens(userID uuid.UUID, tokenType utils.Tok
 
 // CreateAuthTokenForUser creates a new auth token with config-based expiry
 func (s *TokenService) CreateAuthTokenForUser(user models.User, userAgent, ip string) (*models.Token, error) {
-	// Parse duration from config
-	expiry, err := time.ParseDuration(config.AppConfig.Auth.JWT.TokenExpiry.Auth)
+	expiry, err := time.ParseDuration(config.Auth.JWT.Expiry)
 	if err != nil {
 		return nil, fmt.Errorf("invalid auth token expiry configuration: %w", err)
 	}
@@ -109,7 +108,7 @@ func (s *TokenService) CreateAuthTokenForUser(user models.User, userAgent, ip st
 }
 
 func (s *TokenService) CreateEmailVerificationTokenForUser(user models.User, userAgent, ip string) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.AppConfig.Auth.JWT.TokenExpiry.EmailVerification)
+	expiry, err := time.ParseDuration(config.Auth.Verification.Expiry)
 	if err != nil {
 		return nil, fmt.Errorf("invalid email verification token expiry configuration: %w", err)
 	}
@@ -124,7 +123,7 @@ func (s *TokenService) CreateEmailVerificationTokenForUser(user models.User, use
 }
 
 func (s *TokenService) CreatePasswordResetTokenForUser(user models.User, userAgent, ip string) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.AppConfig.Auth.JWT.TokenExpiry.PasswordReset)
+	expiry, err := time.ParseDuration(config.Auth.PasswordReset.Expiry)
 	if err != nil {
 		return nil, fmt.Errorf("invalid password reset token expiry configuration: %w", err)
 	}

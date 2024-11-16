@@ -19,14 +19,9 @@ func init() {
 		log.Fatal("Error loading .env file")
 	}
 
-	// Load config.yaml
+	// Load all configs
 	if err := config.LoadConfig(); err != nil {
-		log.Fatal("Error loading config:", err)
-	}
-
-	// Load messages.yaml
-	if err := config.LoadMessages(); err != nil {
-		log.Fatal("Error loading messages:", err)
+		log.Fatal("Error loading configs:", err)
 	}
 
 	// Initialize validator

@@ -1,0 +1,9 @@
+auth:
+    enabled: false
+    header:
+        key: '' # Ex. 'Authorization'
+        value: '' # Ex. 'Bearer TOKEN'
+from: '' # Ex. 'noreply@example.com'
+subjects:
+    verification: 'Verify your email: {{.email}}'
+    reset: 'Password reset for: {{.email}}'
