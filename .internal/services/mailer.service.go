@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"auth-api/.internal/config"
 	"auth-api/.internal/models"
@@ -86,9 +87,11 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 		Subject:  config.Mailer.Subjects.Verification,
 		Template: config.Mailer.Templates.Verification,
 		Data: map[string]interface{}{
-			"subject": config.Mailer.Subjects.Verification,
-			"email":   email,
-			"url":     verifyURL,
+			"subject":   config.Mailer.Subjects.Verification,
+			"email":     email,
+			"url":       verifyURL,
+			"expiry":    config.Auth.Token.Verification.Expiry,
+			"expiresAt": token.ExpiresAt.Format(time.Stamp),
 		},
 	})
 }
@@ -105,9 +108,11 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 		Subject:  config.Mailer.Subjects.Reset,
 		Template: config.Mailer.Templates.Reset,
 		Data: map[string]interface{}{
-			"subject": config.Mailer.Subjects.Reset,
-			"email":   email,
-			"url":     resetURL,
+			"subject":   config.Mailer.Subjects.Reset,
+			"email":     email,
+			"url":       resetURL,
+			"expiry":    config.Auth.Token.Verification.Expiry,
+			"expiresAt": token.ExpiresAt.Format(time.Stamp),
 		},
 	})
 }
