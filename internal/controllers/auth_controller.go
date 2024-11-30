@@ -9,10 +9,10 @@ import (
 	"auth-api/pkg/requests"
 	"auth-api/pkg/utils"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/log"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -51,7 +51,7 @@ func Register(c *fiber.Ctx) error {
 	// Hash password
 	hashedPassword, err := utils.HashPassword(input.Password)
 	if err != nil {
-		log.Printf("failed to hash password: %v", err)
+		log.Errorf("failed to hash password: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
@@ -83,7 +83,7 @@ func Register(c *fiber.Ctx) error {
 	if token != nil {
 		mailer := services.NewMailerService()
 		if err := mailer.SendVerificationEmail(user.Email, token); err != nil {
-			log.Printf("failed to send verification email: %v", err)
+			log.Errorf("failed to send verification email: %v", err)
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.MailService, nil)
 		}
 	}
@@ -236,7 +236,7 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 	// Send password reset email
 	mailer := services.NewMailerService()
 	if err := mailer.SendPasswordResetEmail(user.Email, token); err != nil {
-		log.Printf("failed to send password reset email: %v", err)
+		log.Errorf("failed to send password reset email: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.MailService, nil)
 	}
 
@@ -475,7 +475,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 	})
 
 	if err != nil {
-		log.Printf("failed to delete account: %v", err)
+		log.Errorf("failed to delete account: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
