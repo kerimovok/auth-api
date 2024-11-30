@@ -1,11 +1,12 @@
 package middleware
 
 import (
-	"auth-api/.internal/config"
-	"auth-api/.internal/database"
-	"auth-api/.internal/models"
-	"auth-api/.internal/services"
-	"auth-api/.internal/utils"
+	"auth-api/internal/models"
+	"auth-api/internal/services"
+	"auth-api/pkg/config"
+	"auth-api/pkg/constants"
+	"auth-api/pkg/database"
+	"auth-api/pkg/utils"
 
 	"fmt"
 	"strings"
@@ -23,7 +24,7 @@ func RequireAuth() fiber.Handler {
 		}
 
 		tokenService := services.NewTokenService()
-		token, err := tokenService.ValidateToken(tokenID, utils.AuthToken)
+		token, err := tokenService.ValidateToken(tokenID, constants.AuthToken)
 		if err != nil {
 			return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidToken, nil)
 		}
@@ -82,7 +83,7 @@ func extractTokenID(c *fiber.Ctx) (uuid.UUID, error) {
 // Add helper for user validation
 func validateUser(user models.User, tokenService *services.TokenService) error {
 	if user.IsBlocked {
-		if err := tokenService.RevokeAllUserTokens(user.ID, utils.AuthToken); err != nil {
+		if err := tokenService.RevokeAllUserTokens(user.ID, constants.AuthToken); err != nil {
 			return fmt.Errorf("failed to revoke tokens for blocked user: %w", err)
 		}
 		return fmt.Errorf("account blocked")

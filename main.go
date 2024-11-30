@@ -1,14 +1,13 @@
 package main
 
 import (
+	"auth-api/pkg/config"
+	"auth-api/pkg/database"
+	"auth-api/pkg/validator"
 	"log"
 	"os"
 
-	"auth-api/.internal/config"
-	"auth-api/.internal/database"
-	"auth-api/.internal/routes"
-	"auth-api/.internal/validator"
-
+	"auth-api/internal/routes"
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 )

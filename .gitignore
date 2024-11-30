@@ -8,3 +8,6 @@ attachments/*
 # Templates
 templates/*
 !templates/.gitkeep
+
+# DS_STORE
+.DS_Store

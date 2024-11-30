@@ -1,11 +1,10 @@
 package utils
 
 import (
+	"auth-api/pkg/config"
 	"fmt"
 	"strings"
 	"unicode"
-
-	"auth-api/.internal/config"
 )
 
 func ValidatePasswordStrength(password string) error {

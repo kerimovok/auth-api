@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"auth-api/.internal/models"
+	"auth-api/internal/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -50,9 +50,4 @@ func ConnectDB() error {
 
 	DB = db
 	return nil
-}
-
-// GetDB returns the database instance
-func GetDB() *gorm.DB {
-	return DB
 }

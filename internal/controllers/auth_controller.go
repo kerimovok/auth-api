@@ -1,11 +1,13 @@
-package handlers
+package controllers
 
 import (
-	"auth-api/.internal/config"
-	"auth-api/.internal/database"
-	"auth-api/.internal/models"
-	"auth-api/.internal/services"
-	"auth-api/.internal/utils"
+	"auth-api/internal/models"
+	"auth-api/internal/services"
+	"auth-api/pkg/config"
+	"auth-api/pkg/constants"
+	"auth-api/pkg/database"
+	"auth-api/pkg/requests"
+	"auth-api/pkg/utils"
 	"fmt"
 	"log"
 	"time"
@@ -15,39 +17,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
-}
-
-type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
-}
-
-type PasswordResetRequest struct {
-	Email string `json:"email" validate:"required,email"`
-}
-
-type ResetPasswordRequest struct {
-	Token    string `json:"token" validate:"required,uuid"`
-	Password string `json:"password" validate:"required"`
-}
-
-type ChangePasswordRequest struct {
-	OldPassword string `json:"oldPassword" validate:"required"`
-	NewPassword string `json:"newPassword" validate:"required"`
-}
-
-type ChangeEmailRequest struct {
-	Password string `json:"password" validate:"required"`
-	NewEmail string `json:"newEmail" validate:"required,email"`
-}
-
-type DeleteAccountRequest struct {
-	Password string `json:"password" validate:"required"`
-}
-
 // UserInfo returns the current user's information
 func UserInfo(c *fiber.Ctx) error {
 	user := c.Locals("user").(models.User)
@@ -56,46 +25,50 @@ func UserInfo(c *fiber.Ctx) error {
 
 // Register handles user registration
 func Register(c *fiber.Ctx) error {
-	var req RegisterRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.RegisterRequest
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	// Normalize email
-	req.Email = utils.NormalizeEmail(req.Email)
+	input.Email = utils.NormalizeEmail(input.Email)
 
 	// Check if email exists - use case-insensitive comparison
 	var existingUser models.User
-	if result := database.DB.Where("LOWER(email) = LOWER(?)", req.Email).First(&existingUser); result.Error == nil {
+	if result := database.DB.Where("LOWER(email) = LOWER(?)", input.Email).First(&existingUser); result.Error == nil {
 		return utils.ErrorResponse(c, fiber.StatusConflict, config.Messages.Auth.Error.EmailExists, nil)
 	}
 
 	// Validate password strength
-	if err := utils.ValidatePasswordStrength(req.Password); err != nil {
+	if err := utils.ValidatePasswordStrength(input.Password); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
 	// Hash password
-	hashedPassword, err := utils.HashPassword(req.Password)
+	hashedPassword, err := utils.HashPassword(input.Password)
 	if err != nil {
 		log.Printf("failed to hash password: %v", err)
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
 	user := models.User{
-		Email:    req.Email,
+		Email:    input.Email,
 		Password: hashedPassword,
 	}
 
 	var token *models.Token
-	err = withTransaction(c, func(tx *gorm.DB) error {
+	err = withTransaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
 			return fmt.Errorf("failed to create user: %w", err)
 		}
 
 		if config.Auth.Verification {
 			tokenService := services.NewTokenService()
-			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), c.IP())
+			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), c)
 			if err != nil {
 				return fmt.Errorf("failed to create verification token: %w", err)
 			}
@@ -120,23 +93,28 @@ func Register(c *fiber.Ctx) error {
 
 // Login handles user authentication
 func Login(c *fiber.Ctx) error {
-	var req LoginRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.LoginRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	// Normalize email
-	req.Email = utils.NormalizeEmail(req.Email)
+	input.Email = utils.NormalizeEmail(input.Email)
 
 	// Find user by email - use case-insensitive comparison
 	var user models.User
-	result := database.DB.Where("LOWER(email) = LOWER(?)", req.Email).First(&user)
+	result := database.DB.Where("LOWER(email) = LOWER(?)", input.Email).First(&user)
 	if result.Error != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidCredentials, nil)
 	}
 
 	// Check password
-	if !utils.CheckPassword(req.Password, user.Password) {
+	if !utils.CheckPassword(input.Password, user.Password) {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidCredentials, nil)
 	}
 
@@ -146,12 +124,12 @@ func Login(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := withTransaction(c, func(tx *gorm.DB) error {
+	err := withTransaction(func(tx *gorm.DB) error {
 		tokenService := services.NewTokenService()
 
 		// Create new token
 		var err error
-		token, err = tokenService.CreateAuthTokenForUser(user, c.Get("User-Agent"), c.IP())
+		token, err = tokenService.CreateAuthTokenForUser(user, c.Get("User-Agent"), c)
 		if err != nil {
 			return fmt.Errorf("failed to create auth token: %w", err)
 		}
@@ -171,7 +149,6 @@ func Login(c *fiber.Ctx) error {
 
 	return utils.SuccessResponse(c, config.Messages.Auth.Success.Login, fiber.Map{
 		"token": token.ID,
-		"user":  user,
 	})
 }
 
@@ -183,12 +160,12 @@ func ConfirmEmail(c *fiber.Ctx) error {
 	}
 
 	tokenService := services.NewTokenService()
-	token, err := tokenService.ValidateToken(tokenID, utils.EmailVerificationToken)
+	token, err := tokenService.ValidateToken(tokenID, constants.EmailVerificationToken)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidToken, nil)
 	}
 
-	err = withTransaction(c, func(tx *gorm.DB) error {
+	err = withTransaction(func(tx *gorm.DB) error {
 		var user models.User
 		if err := tx.First(&user, token.UserID).Error; err != nil {
 			return fmt.Errorf("failed to find user: %w", err)
@@ -221,25 +198,30 @@ func ConfirmEmail(c *fiber.Ctx) error {
 
 // RequestPasswordReset initiates the password reset process
 func RequestPasswordReset(c *fiber.Ctx) error {
-	var req PasswordResetRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.PasswordResetRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	// Find user by email
 	var user models.User
-	result := database.DB.Where("LOWER(email) = LOWER(?)", utils.NormalizeEmail(req.Email)).First(&user)
+	result := database.DB.Where("LOWER(email) = LOWER(?)", utils.NormalizeEmail(input.Email)).First(&user)
 	if result.Error != nil {
 		// Don't reveal if user exists
 		return utils.SuccessResponse(c, config.Messages.Auth.Success.PasswordResetRequested, nil)
 	}
 
 	var token *models.Token
-	err := withTransaction(c, func(tx *gorm.DB) error {
+	err := withTransaction(func(tx *gorm.DB) error {
 		// Generate new token
 		tokenService := services.NewTokenService()
 		var err error
-		token, err = tokenService.CreatePasswordResetToken(user, c.Get("User-Agent"), c.IP())
+		token, err = tokenService.CreatePasswordResetToken(user, c.Get("User-Agent"), c)
 		if err != nil {
 			return fmt.Errorf("failed to create password reset token: %w", err)
 		}
@@ -263,36 +245,41 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 
 // ResetPassword handles password reset with token
 func ResetPassword(c *fiber.Ctx) error {
-	var req ResetPasswordRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.ResetPasswordRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	// Parse token ID
-	tokenID, err := uuid.Parse(req.Token)
+	tokenID, err := uuid.Parse(input.Token)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Auth.Error.InvalidToken, nil)
 	}
 
 	// Validate token
 	tokenService := services.NewTokenService()
-	token, err := tokenService.ValidateToken(tokenID, utils.PasswordResetToken)
+	token, err := tokenService.ValidateToken(tokenID, constants.PasswordResetToken)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidToken, nil)
 	}
 
 	// Validate password strength
-	if err := utils.ValidatePasswordStrength(req.Password); err != nil {
+	if err := utils.ValidatePasswordStrength(input.Password); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
 	// Hash new password
-	hashedPassword, err := utils.HashPassword(req.Password)
+	hashedPassword, err := utils.HashPassword(input.Password)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
-	err = withTransaction(c, func(tx *gorm.DB) error {
+	err = withTransaction(func(tx *gorm.DB) error {
 		// Check if user exists
 		var user models.User
 		if err := tx.First(&user, token.UserID).Error; err != nil {
@@ -321,35 +308,40 @@ func ResetPassword(c *fiber.Ctx) error {
 
 // ChangePassword handles password change for authenticated users
 func ChangePassword(c *fiber.Ctx) error {
-	var req ChangePasswordRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.ChangePasswordRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	user := c.Locals("user").(models.User)
 
 	// Verify old password
-	if !utils.CheckPassword(req.OldPassword, user.Password) {
+	if !utils.CheckPassword(input.OldPassword, user.Password) {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidPassword, nil)
 	}
 
 	// Prevent using the same password
-	if utils.CheckPassword(req.NewPassword, user.Password) {
+	if utils.CheckPassword(input.NewPassword, user.Password) {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Auth.Error.SamePassword, nil)
 	}
 
 	// Validate new password strength
-	if err := utils.ValidatePasswordStrength(req.NewPassword); err != nil {
+	if err := utils.ValidatePasswordStrength(input.NewPassword); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, err.Error(), nil)
 	}
 
 	// Hash new password
-	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	hashedPassword, err := utils.HashPassword(input.NewPassword)
 	if err != nil {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
-	err = withTransaction(c, func(tx *gorm.DB) error {
+	err = withTransaction(func(tx *gorm.DB) error {
 		// Update password
 		if err := tx.Model(&user).Update("password", hashedPassword).Error; err != nil {
 			return fmt.Errorf("failed to update password: %w", err)
@@ -358,7 +350,7 @@ func ChangePassword(c *fiber.Ctx) error {
 		if !config.Auth.Allow.ConcurrentLogins {
 			currentToken := c.Locals("token").(*models.Token)
 			tokenService := services.NewTokenService()
-			if err := tokenService.RevokeAllUserTokensExcept(user.ID, utils.AuthToken, currentToken.ID); err != nil {
+			if err := tokenService.RevokeAllUserTokensExcept(user.ID, constants.AuthToken, currentToken.ID); err != nil {
 				return fmt.Errorf("failed to revoke tokens: %w", err)
 			}
 		}
@@ -375,35 +367,40 @@ func ChangePassword(c *fiber.Ctx) error {
 
 // ChangeEmail initiates email change process
 func ChangeEmail(c *fiber.Ctx) error {
-	var req ChangeEmailRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.ChangeEmailRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	user := c.Locals("user").(models.User)
 
 	// Verify password
-	if !utils.CheckPassword(req.Password, user.Password) {
+	if !utils.CheckPassword(input.Password, user.Password) {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidPassword, nil)
 	}
 
 	// Normalize new email
-	req.NewEmail = utils.NormalizeEmail(req.NewEmail)
+	input.NewEmail = utils.NormalizeEmail(input.NewEmail)
 
 	// Check if new email is already registered - use case-insensitive comparison
 	var existingUser models.User
-	if result := database.DB.Where("LOWER(email) = LOWER(?)", req.NewEmail).First(&existingUser); result.Error == nil {
+	if result := database.DB.Where("LOWER(email) = LOWER(?)", input.NewEmail).First(&existingUser); result.Error == nil {
 		return utils.ErrorResponse(c, fiber.StatusConflict, config.Messages.Auth.Error.EmailExists, nil)
 	}
 
 	var token *models.Token
-	err := withTransaction(c, func(tx *gorm.DB) error {
+	err := withTransaction(func(tx *gorm.DB) error {
 		// First, create the verification token if required
 		// This ensures we don't update the email if token creation fails
 		if config.Auth.Verification {
 			tokenService := services.NewTokenService()
 			var err error
-			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), c.IP())
+			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), c)
 			if err != nil {
 				return fmt.Errorf("failed to create verification token: %w", err)
 			}
@@ -416,7 +413,7 @@ func ChangeEmail(c *fiber.Ctx) error {
 
 		// Then update email if token was created successfully (or not required)
 		if err := tx.Model(&user).Updates(map[string]interface{}{
-			"email":       req.NewEmail,
+			"email":       input.NewEmail,
 			"is_verified": false,
 		}).Error; err != nil {
 			return fmt.Errorf("failed to update email: %w", err)
@@ -433,7 +430,7 @@ func ChangeEmail(c *fiber.Ctx) error {
 	// Send verification email if token was created
 	if token != nil {
 		mailer := services.NewMailerService()
-		if err := mailer.SendVerificationEmail(req.NewEmail, token); err != nil {
+		if err := mailer.SendVerificationEmail(input.NewEmail, token); err != nil {
 			utils.LogError("send verification email", err)
 			return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.MailService, nil)
 		}
@@ -444,19 +441,24 @@ func ChangeEmail(c *fiber.Ctx) error {
 
 // DeleteAccount handles account deletion for authenticated users
 func DeleteAccount(c *fiber.Ctx) error {
-	var req DeleteAccountRequest
-	if err := utils.ValidateRequest(c, &req); err != nil {
+	var input requests.DeleteAccountRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
+	}
+
+	if err := utils.ValidateRequest(&input); err != nil {
 		return utils.ErrorResponse(c, fiber.StatusBadRequest, config.Messages.Validation.Error.InvalidRequest, err)
 	}
 
 	user := c.Locals("user").(models.User)
 
 	// Verify password
-	if !utils.CheckPassword(req.Password, user.Password) {
+	if !utils.CheckPassword(input.Password, user.Password) {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidPassword, nil)
 	}
 
-	err := withTransaction(c, func(tx *gorm.DB) error {
+	err := withTransaction(func(tx *gorm.DB) error {
 		// Revoke all tokens first
 		if err := tx.Model(&models.Token{}).
 			Where("user_id = ? AND revoked_at IS NULL", user.ID).
@@ -484,7 +486,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 func Logout(c *fiber.Ctx) error {
 	token := c.Locals("token").(*models.Token)
 
-	err := withTransaction(c, func(tx *gorm.DB) error {
+	err := withTransaction(func(tx *gorm.DB) error {
 		// Revoke the current token
 		if err := tx.Model(token).Update("revoked_at", time.Now()).Error; err != nil {
 			return fmt.Errorf("failed to revoke token: %w", err)
@@ -500,7 +502,7 @@ func Logout(c *fiber.Ctx) error {
 }
 
 // Add a common transaction helper to reduce boilerplate
-func withTransaction(c *fiber.Ctx, fn func(*gorm.DB) error) error {
+func withTransaction(fn func(*gorm.DB) error) error {
 	tx := database.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {

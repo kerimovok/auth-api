@@ -1,6 +1,8 @@
 package services
 
 import (
+	"auth-api/pkg/config"
+	"auth-api/pkg/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -9,9 +11,7 @@ import (
 	"os"
 	"time"
 
-	"auth-api/.internal/config"
-	"auth-api/.internal/models"
-	"auth-api/.internal/utils"
+	"auth-api/internal/models"
 )
 
 type MailRequest struct {

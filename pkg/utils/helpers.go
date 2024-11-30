@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"log"
+	"github.com/gofiber/fiber/v2/log"
 	"strings"
 )
 
@@ -13,7 +13,7 @@ func NormalizeEmail(email string) string {
 
 // LogError provides consistent error logging
 func LogError(operation string, err error) {
-	log.Printf("failed to %s: %v", operation, err)
+	log.Errorf("failed to %s: %v", operation, err)
 }
 
 // WrapError provides consistent error wrapping
