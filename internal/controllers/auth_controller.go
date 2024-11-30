@@ -61,7 +61,7 @@ func Register(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err = withTransaction(func(tx *gorm.DB) error {
+	err = database.WithTransaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
 			return fmt.Errorf("failed to create user: %w", err)
 		}
@@ -124,7 +124,7 @@ func Login(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := withTransaction(func(tx *gorm.DB) error {
+	err := database.WithTransaction(func(tx *gorm.DB) error {
 		tokenService := services.NewTokenService()
 
 		// Create new token
@@ -165,7 +165,7 @@ func ConfirmEmail(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidToken, nil)
 	}
 
-	err = withTransaction(func(tx *gorm.DB) error {
+	err = database.WithTransaction(func(tx *gorm.DB) error {
 		var user models.User
 		if err := tx.First(&user, token.UserID).Error; err != nil {
 			return fmt.Errorf("failed to find user: %w", err)
@@ -217,7 +217,7 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := withTransaction(func(tx *gorm.DB) error {
+	err := database.WithTransaction(func(tx *gorm.DB) error {
 		// Generate new token
 		tokenService := services.NewTokenService()
 		var err error
@@ -279,7 +279,7 @@ func ResetPassword(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
-	err = withTransaction(func(tx *gorm.DB) error {
+	err = database.WithTransaction(func(tx *gorm.DB) error {
 		// Check if user exists
 		var user models.User
 		if err := tx.First(&user, token.UserID).Error; err != nil {
@@ -341,7 +341,7 @@ func ChangePassword(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusInternalServerError, config.Messages.Server.Error.Internal, nil)
 	}
 
-	err = withTransaction(func(tx *gorm.DB) error {
+	err = database.WithTransaction(func(tx *gorm.DB) error {
 		// Update password
 		if err := tx.Model(&user).Update("password", hashedPassword).Error; err != nil {
 			return fmt.Errorf("failed to update password: %w", err)
@@ -394,7 +394,7 @@ func ChangeEmail(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := withTransaction(func(tx *gorm.DB) error {
+	err := database.WithTransaction(func(tx *gorm.DB) error {
 		// First, create the verification token if required
 		// This ensures we don't update the email if token creation fails
 		if config.Auth.Verification {
@@ -458,7 +458,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 		return utils.ErrorResponse(c, fiber.StatusUnauthorized, config.Messages.Auth.Error.InvalidPassword, nil)
 	}
 
-	err := withTransaction(func(tx *gorm.DB) error {
+	err := database.WithTransaction(func(tx *gorm.DB) error {
 		// Revoke all tokens first
 		if err := tx.Model(&models.Token{}).
 			Where("user_id = ? AND revoked_at IS NULL", user.ID).
@@ -486,7 +486,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 func Logout(c *fiber.Ctx) error {
 	token := c.Locals("token").(*models.Token)
 
-	err := withTransaction(func(tx *gorm.DB) error {
+	err := database.WithTransaction(func(tx *gorm.DB) error {
 		// Revoke the current token
 		if err := tx.Model(token).Update("revoked_at", time.Now()).Error; err != nil {
 			return fmt.Errorf("failed to revoke token: %w", err)
@@ -499,21 +499,4 @@ func Logout(c *fiber.Ctx) error {
 	}
 
 	return utils.SuccessResponse(c, config.Messages.Auth.Success.Logout, nil)
-}
-
-// Add a common transaction helper to reduce boilerplate
-func withTransaction(fn func(*gorm.DB) error) error {
-	tx := database.DB.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := fn(tx); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	return tx.Commit().Error
 }
