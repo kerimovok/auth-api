@@ -34,6 +34,7 @@ COPY --from=builder /build/main .
 
 # Copy config files
 COPY config/ /app/config/
+
 # Copy .env file
 COPY .env /app/
 
