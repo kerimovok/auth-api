@@ -23,7 +23,9 @@ import (
 func init() {
 	// Load .env file
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		if os.Getenv("GO_ENV") != "production" {
+			log.Fatal("Error loading .env file")
+		}
 	}
 
 	// Load all configs

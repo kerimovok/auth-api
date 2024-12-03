@@ -25,14 +25,12 @@ type MailRequest struct {
 type MailerService struct {
 	client  *http.Client
 	baseURL string
-	appURL  string
 }
 
 func NewMailerService() *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
 		baseURL: os.Getenv("MAILER_URI"),
-		appURL:  os.Getenv("BASE_URL"),
 	}
 }
 
