@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"auth-api/internal/routes"
 	"auth-api/pkg/config"
@@ -17,17 +16,9 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
-	"github.com/joho/godotenv"
 )
 
 func init() {
-	// Load .env file
-	if err := godotenv.Load(); err != nil {
-		if os.Getenv("GO_ENV") != "production" {
-			log.Fatal("Error loading .env file")
-		}
-	}
-
 	// Load all configs
 	if err := config.LoadConfig(); err != nil {
 		log.Fatal("Error loading configs:", err)
@@ -65,10 +56,5 @@ func main() {
 
 	routes.SetupRoutes(app)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3001"
-	}
-
-	log.Fatal(app.Listen(":" + port))
+	log.Fatal(app.Listen(":" + config.Env.Server.Port))
 }

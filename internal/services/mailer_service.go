@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"auth-api/internal/models"
@@ -30,7 +29,7 @@ type MailerService struct {
 func NewMailerService() *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
-		baseURL: os.Getenv("MAILER_URI"),
+		baseURL: config.Env.Mailer.URI,
 	}
 }
 

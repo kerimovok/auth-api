@@ -2,9 +2,9 @@ package database
 
 import (
 	"fmt"
-	"os"
 
 	"auth-api/internal/models"
+	"auth-api/pkg/config"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -16,11 +16,11 @@ func ConnectDB() error {
 	// Construct DSN (Data Source Name)
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASS"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_PORT"),
+		config.Env.DB.Host,
+		config.Env.DB.User,
+		config.Env.DB.Pass,
+		config.Env.DB.Name,
+		config.Env.DB.Port,
 	)
 
 	// Open connection
