@@ -4,7 +4,6 @@ import (
 	"auth-api/pkg/utils"
 	"os"
 
-	"github.com/gofiber/fiber/v2/log"
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
@@ -117,7 +116,7 @@ var (
 func LoadConfig() error {
 	if err := godotenv.Load(); err != nil {
 		if utils.GetEnv("GO_ENV") != "production" {
-			log.Warnf("Warning: .env file not found")
+			return err
 		}
 	}
 
