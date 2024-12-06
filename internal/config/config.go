@@ -1,15 +1,10 @@
 package config
 
 import (
-	"fmt"
-	"log"
-	"net/mail"
-	"net/url"
+	"auth-api/pkg/utils"
 	"os"
-	"reflect"
-	"strconv"
-	"strings"
 
+	"github.com/gofiber/fiber/v2/log"
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
@@ -112,71 +107,18 @@ type MessagesConfig struct {
 	} `yaml:"server"`
 }
 
-type EnvConfig struct {
-	Server struct {
-		Port        string
-		Environment string
-	}
-	DB struct {
-		Host string
-		Port string
-		User string
-		Pass string
-		Name string
-	}
-	Mailer struct {
-		URI string
-	}
-}
-
 var (
 	Auth     AuthConfig
 	Mailer   MailerConfig
 	Messages MessagesConfig
-	Env      *EnvConfig
 )
-
-// ValidationRule defines a validation function that returns an error if validation fails
-type ValidationRule struct {
-	Field   string
-	Rule    func(value string) bool
-	Message string
-}
 
 // LoadConfig loads all configuration files
 func LoadConfig() error {
 	if err := godotenv.Load(); err != nil {
-		if GetEnv("GO_ENV") != "production" {
-			log.Printf("Warning: .env file not found")
+		if utils.GetEnv("GO_ENV") != "production" {
+			log.Warnf("Warning: .env file not found")
 		}
-	}
-
-	Env = &EnvConfig{
-		Server: struct {
-			Port        string
-			Environment string
-		}{
-			Port:        GetEnvOrDefault("PORT", "3001"),
-			Environment: GetEnvOrDefault("GO_ENV", "development"),
-		},
-		DB: struct {
-			Host string
-			Port string
-			User string
-			Pass string
-			Name string
-		}{
-			Host: GetEnvOrDefault("DB_HOST", ""),
-			Port: GetEnvOrDefault("DB_PORT", ""),
-			User: GetEnvOrDefault("DB_USER", ""),
-			Pass: GetEnvOrDefault("DB_PASS", ""),
-			Name: GetEnvOrDefault("DB_NAME", ""),
-		},
-		Mailer: struct {
-			URI string
-		}{
-			URI: GetEnvOrDefault("MAILER_URI", ""),
-		},
 	}
 
 	// Load auth config
@@ -206,114 +148,5 @@ func LoadConfig() error {
 		return err
 	}
 
-	return validateConfig()
-}
-
-// validateConfig checks all required configuration values
-func validateConfig() error {
-	rules := []ValidationRule{
-		// Server validation
-		{
-			Field:   "Server.Port",
-			Rule:    func(v string) bool { return v != "" },
-			Message: "server port is required",
-		},
-
-		// Database validation
-		{
-			Field:   "DB.Host",
-			Rule:    func(v string) bool { return v != "" },
-			Message: "database host is required",
-		},
-		{
-			Field:   "DB.Port",
-			Rule:    func(v string) bool { return v != "" },
-			Message: "database port is required",
-		},
-		{
-			Field:   "DB.User",
-			Rule:    func(v string) bool { return v != "" },
-			Message: "database user is required",
-		},
-		{
-			Field:   "DB.Name",
-			Rule:    func(v string) bool { return v != "" },
-			Message: "database name is required",
-		},
-
-		// Mailer validation
-		{
-			Field:   "Mailer.URI",
-			Rule:    func(v string) bool { return v != "" },
-			Message: "mailer URI is required",
-		},
-	}
-
-	var errors []string
-	for _, rule := range rules {
-		value := getConfigValue(rule.Field)
-		if !rule.Rule(value) {
-			errors = append(errors, rule.Message)
-		}
-	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("configuration validation failed: %s", strings.Join(errors, "; "))
-	}
-
 	return nil
-}
-
-// getConfigValue retrieves a configuration value using reflection based on the field path
-func getConfigValue(fieldPath string) string {
-	parts := strings.Split(fieldPath, ".")
-	value := reflect.ValueOf(Env).Elem()
-
-	for _, part := range parts {
-		value = value.FieldByName(part)
-	}
-
-	return value.String()
-}
-
-// AddValidationRule allows adding custom validation rules
-func AddValidationRule(field string, rule func(string) bool, message string) {
-	customRules = append(customRules, ValidationRule{
-		Field:   field,
-		Rule:    rule,
-		Message: message,
-	})
-}
-
-// Custom validation rules that can be added by the application
-var customRules []ValidationRule
-
-// Custom validation helper functions
-func IsValidPort(port string) bool {
-	if port == "" {
-		return false
-	}
-	portNum, err := strconv.Atoi(port)
-	return err == nil && portNum > 0 && portNum <= 65535
-}
-
-func IsValidEmail(email string) bool {
-	_, err := mail.ParseAddress(email)
-	return err == nil
-}
-
-func IsValidURL(urlStr string) bool {
-	_, err := url.ParseRequestURI(urlStr)
-	return err == nil
-}
-
-func GetEnvOrDefault(key, defaultValue string) string {
-	if value := GetEnv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func GetEnv(key string) string {
-	return os.Getenv(key)
 }

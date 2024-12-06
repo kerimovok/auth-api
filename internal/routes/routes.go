@@ -8,17 +8,19 @@ import (
 )
 
 func SetupRoutes(app *fiber.App) {
-	api := app.Group("/api/v1")
+	// API routes group
+	api := app.Group("/api")
+	v1 := api.Group("/v1")
 
 	// Public routes
-	api.Post("/register", controllers.Register)
-	api.Post("/login", controllers.Login)
-	api.Post("/request-password-reset", controllers.RequestPasswordReset)
-	api.Post("/reset-password", controllers.ResetPassword)
-	api.Get("/confirm-email", controllers.ConfirmEmail)
+	v1.Post("/register", controllers.Register)
+	v1.Post("/login", controllers.Login)
+	v1.Post("/request-password-reset", controllers.RequestPasswordReset)
+	v1.Post("/reset-password", controllers.ResetPassword)
+	v1.Get("/confirm-email", controllers.ConfirmEmail)
 
 	// Protected routes
-	protected := api.Use(middleware.RequireAuth())
+	protected := v1.Use(middleware.RequireAuth())
 	protected.Post("/logout", controllers.Logout)
 	protected.Get("/userinfo", controllers.UserInfo)
 

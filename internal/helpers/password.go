@@ -1,7 +1,7 @@
-package utils
+package helpers
 
 import (
-	"auth-api/pkg/config"
+	"auth-api/internal/config"
 	"fmt"
 	"strings"
 	"unicode"

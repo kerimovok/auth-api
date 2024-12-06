@@ -3,9 +3,11 @@ package main
 import (
 	"log"
 
+	"auth-api/internal/config"
+	"auth-api/internal/constants"
 	"auth-api/internal/routes"
-	"auth-api/pkg/config"
 	"auth-api/pkg/database"
+	"auth-api/pkg/utils"
 	"auth-api/pkg/validator"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,7 +23,12 @@ import (
 func init() {
 	// Load all configs
 	if err := config.LoadConfig(); err != nil {
-		log.Fatal("Error loading configs:", err)
+		utils.LogFatal("failed to load configs", err)
+	}
+
+	// Validate environment variables
+	if err := utils.ValidateConfig(constants.EnvValidationRules); err != nil {
+		utils.LogFatal("configuration validation failed", err)
 	}
 
 	// Initialize validator
@@ -29,7 +36,7 @@ func init() {
 
 	// Connect to database
 	if err := database.ConnectDB(); err != nil {
-		log.Fatal("Error connecting to database:", err)
+		utils.LogFatal("failed to connect to database", err)
 	}
 }
 
@@ -56,5 +63,5 @@ func main() {
 
 	routes.SetupRoutes(app)
 
-	log.Fatal(app.Listen(":" + config.Env.Server.Port))
+	log.Fatal(app.Listen(":" + utils.GetEnv("PORT")))
 }

@@ -1,7 +1,7 @@
 package services
 
 import (
-	"auth-api/pkg/config"
+	"auth-api/internal/config"
 	"auth-api/pkg/utils"
 	"bytes"
 	"encoding/json"
@@ -29,7 +29,7 @@ type MailerService struct {
 func NewMailerService() *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
-		baseURL: config.Env.Mailer.URI,
+		baseURL: utils.GetEnv("MAILER_URI"),
 	}
 }
 

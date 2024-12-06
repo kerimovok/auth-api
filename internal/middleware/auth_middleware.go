@@ -1,10 +1,10 @@
 package middleware
 
 import (
+	"auth-api/internal/config"
+	"auth-api/internal/constants"
 	"auth-api/internal/models"
 	"auth-api/internal/services"
-	"auth-api/pkg/config"
-	"auth-api/pkg/constants"
 	"auth-api/pkg/database"
 	"auth-api/pkg/utils"
 
@@ -84,7 +84,7 @@ func extractTokenID(c *fiber.Ctx) (uuid.UUID, error) {
 func validateUser(user models.User, tokenService *services.TokenService) error {
 	if user.IsBlocked {
 		if err := tokenService.RevokeAllUserTokens(user.ID, constants.AuthToken); err != nil {
-			return fmt.Errorf("failed to revoke tokens for blocked user: %w", err)
+			return utils.WrapError("revoke tokens for blocked user", err)
 		}
 		return fmt.Errorf("account blocked")
 	}

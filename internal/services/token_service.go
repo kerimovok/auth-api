@@ -1,11 +1,11 @@
 package services
 
 import (
+	"auth-api/internal/config"
+	"auth-api/internal/constants"
 	"auth-api/internal/models"
-	"auth-api/pkg/config"
-	"auth-api/pkg/constants"
 	"auth-api/pkg/database"
-	utils2 "auth-api/pkg/utils"
+	"auth-api/pkg/utils"
 	"fmt"
 	"time"
 
@@ -31,11 +31,11 @@ func (s *TokenService) ValidateToken(tokenID uuid.UUID, tokenType constants.Toke
 	var token models.Token
 	err := s.db.Where("id = ? AND type = ?", tokenID, string(tokenType)).First(&token).Error
 	if err != nil {
-		return nil, utils2.WrapError("validate token", fmt.Errorf("token not found: %w", err))
+		return nil, utils.WrapError("validate token", fmt.Errorf("token not found: %w", err))
 	}
 
 	if !token.IsValid() {
-		return nil, utils2.WrapError("validate token", fmt.Errorf("token is invalid or expired"))
+		return nil, utils.WrapError("validate token", fmt.Errorf("token is invalid or expired"))
 	}
 
 	return &token, nil
@@ -56,7 +56,7 @@ func (s *TokenService) RevokeAllUserTokens(userID uuid.UUID, tokenType constants
 
 	// Ignore "record not found" errors
 	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return utils2.WrapError("revoke tokens", result.Error)
+		return utils.WrapError("revoke tokens", result.Error)
 	}
 
 	return nil
@@ -70,7 +70,7 @@ func (s *TokenService) RevokeAllUserTokensExcept(userID uuid.UUID, tokenType con
 		Update("revoked_at", &now)
 
 	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return utils2.WrapError("revoke tokens", result.Error)
+		return utils.WrapError("revoke tokens", result.Error)
 	}
 
 	return nil
@@ -82,11 +82,11 @@ func (s *TokenService) createToken(user models.User, tokenType constants.TokenTy
 		Type:      string(tokenType),
 		ExpiresAt: time.Now().Add(expiry),
 		UserAgent: userAgent,
-		IP:        utils2.GetUserIP(c),
+		IP:        utils.GetUserIP(c),
 	}
 
 	if err := s.db.Create(token).Error; err != nil {
-		return nil, utils2.WrapError("create token", err)
+		return nil, utils.WrapError("create token", err)
 	}
 
 	return token, nil
@@ -95,12 +95,12 @@ func (s *TokenService) createToken(user models.User, tokenType constants.TokenTy
 func (s *TokenService) CreateAuthTokenForUser(user models.User, userAgent string, c *fiber.Ctx) (*models.Token, error) {
 	expiry, err := time.ParseDuration(config.Auth.Token.Auth.Expiry)
 	if err != nil {
-		return nil, utils2.WrapError("parse auth token expiry", err)
+		return nil, utils.WrapError("parse auth token expiry", err)
 	}
 
 	if config.Auth.Token.Auth.RevokeExisting {
 		if err := s.RevokeAllUserTokens(user.ID, constants.AuthToken); err != nil {
-			return nil, utils2.WrapError("revoke existing auth tokens", err)
+			return nil, utils.WrapError("revoke existing auth tokens", err)
 		}
 	}
 
@@ -110,12 +110,12 @@ func (s *TokenService) CreateAuthTokenForUser(user models.User, userAgent string
 func (s *TokenService) CreateEmailVerificationToken(user models.User, userAgent string, c *fiber.Ctx) (*models.Token, error) {
 	expiry, err := time.ParseDuration(config.Auth.Token.Verification.Expiry)
 	if err != nil {
-		return nil, utils2.WrapError("parse verification token expiry", err)
+		return nil, utils.WrapError("parse verification token expiry", err)
 	}
 
 	if config.Auth.Token.Verification.RevokeExisting {
 		if err := s.RevokeAllUserTokens(user.ID, constants.EmailVerificationToken); err != nil {
-			return nil, utils2.WrapError("revoke existing verification tokens", err)
+			return nil, utils.WrapError("revoke existing verification tokens", err)
 		}
 	}
 
@@ -125,12 +125,12 @@ func (s *TokenService) CreateEmailVerificationToken(user models.User, userAgent 
 func (s *TokenService) CreatePasswordResetToken(user models.User, userAgent string, c *fiber.Ctx) (*models.Token, error) {
 	expiry, err := time.ParseDuration(config.Auth.Token.PasswordReset.Expiry)
 	if err != nil {
-		return nil, utils2.WrapError("parse password reset token expiry", err)
+		return nil, utils.WrapError("parse password reset token expiry", err)
 	}
 
 	if config.Auth.Token.PasswordReset.RevokeExisting {
 		if err := s.RevokeAllUserTokens(user.ID, constants.PasswordResetToken); err != nil {
-			return nil, utils2.WrapError("revoke existing password reset tokens", err)
+			return nil, utils.WrapError("revoke existing password reset tokens", err)
 		}
 	}
 
