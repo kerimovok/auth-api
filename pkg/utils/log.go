@@ -12,10 +12,10 @@ func LogError(operation string, err error) {
 	log.Errorf("%s: %v", operation, err)
 }
 
-func LogWarn(operation string, message string) {
-	log.Warnf("%s: %s", operation, message)
+func LogWarn(message string) {
+	log.Warnf("%s", message)
 }
 
-func LogInfo(operation string, message string) {
-	log.Infof("%s: %s", operation, message)
+func LogInfo(message string) {
+	log.Infof("%s", message)
 }

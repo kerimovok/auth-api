@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-
 	"auth-api/internal/config"
 	"auth-api/internal/constants"
 	"auth-api/internal/routes"
@@ -63,5 +61,5 @@ func main() {
 
 	routes.SetupRoutes(app)
 
-	log.Fatal(app.Listen(":" + utils.GetEnv("PORT")))
+	utils.LogFatal("failed to start server", app.Listen(":"+utils.GetEnv("PORT")))
 }
