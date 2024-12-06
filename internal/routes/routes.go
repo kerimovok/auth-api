@@ -12,21 +12,26 @@ func SetupRoutes(app *fiber.App) {
 	api := app.Group("/api")
 	v1 := api.Group("/v1")
 
-	// Public routes
-	v1.Post("/register", controllers.Register)
-	v1.Post("/login", controllers.Login)
-	v1.Post("/request-password-reset", controllers.RequestPasswordReset)
-	v1.Post("/reset-password", controllers.ResetPassword)
-	v1.Get("/confirm-email", controllers.ConfirmEmail)
+	// Auth routes
+	auth := v1.Group("/auth")
 
-	// Protected routes
-	protected := v1.Use(middleware.RequireAuth())
-	protected.Post("/logout", controllers.Logout)
-	protected.Get("/userinfo", controllers.UserInfo)
+	// Public auth routes
+	auth.Post("/register", controllers.Register)
+	auth.Post("/login", controllers.Login)
+	auth.Post("/request-password-reset", controllers.RequestPasswordReset)
+	auth.Post("/reset-password", controllers.ResetPassword)
+	auth.Get("/confirm-email", controllers.ConfirmEmail)
 
-	// Protected + Verified routes
-	verified := protected.Use(middleware.RequireVerification())
-	verified.Put("/change-password", controllers.ChangePassword)
-	verified.Put("/change-email", controllers.ChangeEmail)
-	verified.Delete("/account", controllers.DeleteAccount)
+	// Protected auth routes
+	authProtected := auth.Use(middleware.RequireAuth())
+	authProtected.Post("/logout", controllers.Logout)
+	authProtected.Get("/userinfo", controllers.UserInfo)
+
+	// Protected + Verified auth routes
+	authVerified := authProtected.Use(middleware.RequireVerification())
+	authVerified.Put("/change-password", controllers.ChangePassword)
+	authVerified.Put("/change-email", controllers.ChangeEmail)
+	authVerified.Delete("/account", controllers.DeleteAccount)
+
+	// TODO: Add routes for tokens
 }
