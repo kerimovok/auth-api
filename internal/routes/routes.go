@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"auth-api/internal/controllers"
+	"auth-api/internal/handlers"
 	"auth-api/internal/middleware"
 
 	"github.com/gofiber/fiber/v2"
@@ -20,22 +20,22 @@ func SetupRoutes(app *fiber.App) {
 	auth := v1.Group("/auth")
 
 	// Public auth routes
-	auth.Post("/register", controllers.Register)
-	auth.Post("/login", controllers.Login)
-	auth.Post("/request-password-reset", controllers.RequestPasswordReset)
-	auth.Post("/reset-password", controllers.ResetPassword)
-	auth.Get("/confirm-email", controllers.ConfirmEmail)
+	auth.Post("/register", handlers.Register)
+	auth.Post("/login", handlers.Login)
+	auth.Post("/request-password-reset", handlers.RequestPasswordReset)
+	auth.Post("/reset-password", handlers.ResetPassword)
+	auth.Get("/confirm-email", handlers.ConfirmEmail)
 
 	// Protected auth routes
 	authProtected := auth.Use(middleware.RequireAuth())
-	authProtected.Post("/logout", controllers.Logout)
-	authProtected.Get("/userinfo", controllers.UserInfo)
+	authProtected.Post("/logout", handlers.Logout)
+	authProtected.Get("/userinfo", handlers.UserInfo)
 
 	// Protected + Verified auth routes
 	authVerified := authProtected.Use(middleware.RequireVerification())
-	authVerified.Put("/change-password", controllers.ChangePassword)
-	authVerified.Put("/change-email", controllers.ChangeEmail)
-	authVerified.Delete("/account", controllers.DeleteAccount)
+	authVerified.Put("/change-password", handlers.ChangePassword)
+	authVerified.Put("/change-email", handlers.ChangeEmail)
+	authVerified.Delete("/account", handlers.DeleteAccount)
 
 	// TODO: Add routes for tokens
 }

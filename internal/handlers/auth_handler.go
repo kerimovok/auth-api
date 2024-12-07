@@ -1,4 +1,4 @@
-package controllers
+package handlers
 
 import (
 	"auth-api/internal/config"
