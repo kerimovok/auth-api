@@ -3,8 +3,8 @@ package main
 import (
 	"auth-api/internal/config"
 	"auth-api/internal/constants"
+	"auth-api/internal/database"
 	"auth-api/internal/routes"
-	"auth-api/pkg/database"
 	"log"
 
 	"github.com/gofiber/fiber/v2"

@@ -38,6 +38,11 @@ var EnvValidationRules = []validator.ValidationRule{
 		Message:  "database user is required",
 	},
 	{
+		Variable: "DB_PASS",
+		Rule:     func(v string) bool { return v != "" },
+		Message:  "database password is required",
+	},
+	{
 		Variable: "DB_NAME",
 		Default:  "auth",
 		Rule:     func(v string) bool { return v != "" },

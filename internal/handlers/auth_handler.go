@@ -3,11 +3,11 @@ package handlers
 import (
 	"auth-api/internal/config"
 	"auth-api/internal/constants"
+	"auth-api/internal/database"
 	"auth-api/internal/helpers"
 	"auth-api/internal/models"
 	"auth-api/internal/requests"
 	"auth-api/internal/services"
-	"auth-api/pkg/database"
 	"fmt"
 	"log"
 	"strings"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/kerimovok/go-pkg-database/sql"
 	"github.com/kerimovok/go-pkg-utils/crypto"
 	"github.com/kerimovok/go-pkg-utils/httpx"
 	"github.com/kerimovok/go-pkg-utils/validator"
@@ -70,7 +71,7 @@ func Register(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err = database.WithTransaction(func(tx *gorm.DB) error {
+	err = sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		if err := tx.Create(&user).Error; err != nil {
 			return fmt.Errorf("failed to create user: %w", err)
 		}
@@ -140,7 +141,7 @@ func Login(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := database.WithTransaction(func(tx *gorm.DB) error {
+	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		tokenService := services.NewTokenService()
 
 		// Create new token
@@ -185,7 +186,7 @@ func ConfirmEmail(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	err = database.WithTransaction(func(tx *gorm.DB) error {
+	err = sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		var user models.User
 		if err := tx.First(&user, token.UserID).Error; err != nil {
 			return fmt.Errorf("failed to find user: %w", err)
@@ -242,7 +243,7 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := database.WithTransaction(func(tx *gorm.DB) error {
+	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		// Generate new token
 		tokenService := services.NewTokenService()
 		var err error
@@ -313,7 +314,7 @@ func ResetPassword(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	err = database.WithTransaction(func(tx *gorm.DB) error {
+	err = sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		// Check if user exists
 		var user models.User
 		if err := tx.First(&user, token.UserID).Error; err != nil {
@@ -385,7 +386,7 @@ func ChangePassword(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	err = database.WithTransaction(func(tx *gorm.DB) error {
+	err = sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		// Update password
 		if err := tx.Model(&user).Update("password", hashedPassword).Error; err != nil {
 			return fmt.Errorf("failed to update password: %w", err)
@@ -445,7 +446,7 @@ func ChangeEmail(c *fiber.Ctx) error {
 	}
 
 	var token *models.Token
-	err := database.WithTransaction(func(tx *gorm.DB) error {
+	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		// First, create the verification token if required
 		// This ensures we don't update the email if token creation fails
 		if config.Auth.Verification {
@@ -515,7 +516,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	err := database.WithTransaction(func(tx *gorm.DB) error {
+	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		// Revoke all tokens first
 		if err := tx.Model(&models.Token{}).
 			Where("user_id = ? AND revoked_at IS NULL", user.ID).
@@ -545,7 +546,7 @@ func DeleteAccount(c *fiber.Ctx) error {
 func Logout(c *fiber.Ctx) error {
 	token := c.Locals("token").(*models.Token)
 
-	err := database.WithTransaction(func(tx *gorm.DB) error {
+	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
 		// Revoke the current token
 		if err := tx.Model(token).Update("revoked_at", time.Now()).Error; err != nil {
 			return fmt.Errorf("failed to revoke token: %w", err)

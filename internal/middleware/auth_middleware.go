@@ -3,9 +3,9 @@ package middleware
 import (
 	"auth-api/internal/config"
 	"auth-api/internal/constants"
+	"auth-api/internal/database"
 	"auth-api/internal/models"
 	"auth-api/internal/services"
-	"auth-api/pkg/database"
 	"fmt"
 	"strings"
 

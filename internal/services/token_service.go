@@ -3,8 +3,8 @@ package services
 import (
 	"auth-api/internal/config"
 	"auth-api/internal/constants"
+	"auth-api/internal/database"
 	"auth-api/internal/models"
-	"auth-api/pkg/database"
 	"fmt"
 	"time"
 
