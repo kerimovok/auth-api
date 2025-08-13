@@ -1,10 +1,11 @@
 package config
 
 import (
-	"auth-api/pkg/utils"
+	"log"
 	"os"
 
 	"github.com/joho/godotenv"
+	"github.com/kerimovok/go-pkg-utils/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -115,8 +116,8 @@ var (
 // LoadConfig loads all configuration files
 func LoadConfig() error {
 	if err := godotenv.Load(); err != nil {
-		if utils.GetEnv("GO_ENV") != "production" {
-			return err
+		if config.GetEnv("GO_ENV") != "production" {
+			log.Println("Warning: Failed to load .env file")
 		}
 	}
 

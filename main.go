@@ -5,8 +5,7 @@ import (
 	"auth-api/internal/constants"
 	"auth-api/internal/routes"
 	"auth-api/pkg/database"
-	"auth-api/pkg/utils"
-	"auth-api/pkg/validator"
+	"log"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -16,25 +15,24 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 	"github.com/google/uuid"
+	pkgConfig "github.com/kerimovok/go-pkg-utils/config"
+	pkgValidator "github.com/kerimovok/go-pkg-utils/validator"
 )
 
 func init() {
 	// Load all configs
 	if err := config.LoadConfig(); err != nil {
-		utils.LogFatal("failed to load configs", err)
+		log.Fatalf("failed to load configs: %v", err)
 	}
 
 	// Validate environment variables
-	if err := utils.ValidateConfig(constants.EnvValidationRules); err != nil {
-		utils.LogFatal("configuration validation failed", err)
+	if err := pkgValidator.ValidateConfig(constants.EnvValidationRules); err != nil {
+		log.Fatalf("configuration validation failed: %v", err)
 	}
-
-	// Initialize validator
-	validator.InitValidator()
 
 	// Connect to database
 	if err := database.ConnectDB(); err != nil {
-		utils.LogFatal("failed to connect to database", err)
+		log.Fatalf("failed to connect to database: %v", err)
 	}
 }
 
@@ -61,5 +59,5 @@ func main() {
 
 	routes.SetupRoutes(app)
 
-	utils.LogFatal("failed to start server", app.Listen(":"+utils.GetEnv("PORT")))
+	log.Fatalf("failed to start server: %v", app.Listen(":"+pkgConfig.GetEnv("PORT")))
 }

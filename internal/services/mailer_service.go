@@ -2,7 +2,7 @@ package services
 
 import (
 	"auth-api/internal/config"
-	"auth-api/pkg/utils"
+	"auth-api/internal/models"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"auth-api/internal/models"
+	pkgConfig "github.com/kerimovok/go-pkg-utils/config"
 )
 
 type MailRequest struct {
@@ -29,7 +29,7 @@ type MailerService struct {
 func NewMailerService() *MailerService {
 	return &MailerService{
 		client:  &http.Client{},
-		baseURL: utils.GetEnv("MAILER_URI"),
+		baseURL: pkgConfig.GetEnv("MAILER_URI"),
 	}
 }
 
@@ -37,13 +37,13 @@ func (m *MailerService) SendMail(req MailRequest) error {
 	// Prepare request body
 	body := new(bytes.Buffer)
 	if err := json.NewEncoder(body).Encode(req); err != nil {
-		return utils.WrapError("encode mail request", err)
+		return fmt.Errorf("failed to encode mail request: %w", err)
 	}
 
 	// Create HTTP request
 	httpReq, err := http.NewRequest(http.MethodPost, m.baseURL, body)
 	if err != nil {
-		return utils.WrapError("create mail request", err)
+		return fmt.Errorf("failed to create mail request: %w", err)
 	}
 
 	// Set headers
@@ -58,7 +58,7 @@ func (m *MailerService) SendMail(req MailRequest) error {
 	// Send request
 	resp, err := m.client.Do(httpReq)
 	if err != nil {
-		return utils.WrapError("send mail request", err)
+		return fmt.Errorf("failed to send mail request: %w", err)
 	}
 	defer resp.Body.Close()
 

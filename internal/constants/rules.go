@@ -1,13 +1,16 @@
 package constants
 
-import "auth-api/pkg/utils"
+import (
+	"github.com/kerimovok/go-pkg-utils/config"
+	"github.com/kerimovok/go-pkg-utils/validator"
+)
 
-var EnvValidationRules = []utils.ValidationRule{
+var EnvValidationRules = []validator.ValidationRule{
 	// Server validation
 	{
 		Variable: "PORT",
 		Default:  "3001",
-		Rule:     utils.IsValidPort,
+		Rule:     config.IsValidPort,
 		Message:  "server port is required and must be a valid port number",
 	},
 	{
@@ -26,7 +29,7 @@ var EnvValidationRules = []utils.ValidationRule{
 	{
 		Variable: "DB_PORT",
 		Default:  "5432",
-		Rule:     utils.IsValidPort,
+		Rule:     config.IsValidPort,
 		Message:  "database port is required and must be a valid port number",
 	},
 	{
@@ -44,7 +47,7 @@ var EnvValidationRules = []utils.ValidationRule{
 	// Mailer validation
 	{
 		Variable: "MAILER_URI",
-		Rule:     utils.IsValidURL,
+		Rule:     config.IsValidURL,
 		Message:  "mailer URI is required and must be a valid URL",
 	},
 }

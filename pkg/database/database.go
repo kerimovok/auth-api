@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"auth-api/internal/models"
-	"auth-api/pkg/utils"
+
+	"github.com/kerimovok/go-pkg-utils/config"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -16,11 +17,11 @@ func ConnectDB() error {
 	// Construct DSN (Data Source Name)
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
-		utils.GetEnv("DB_HOST"),
-		utils.GetEnv("DB_USER"),
-		utils.GetEnv("DB_PASS"),
-		utils.GetEnv("DB_NAME"),
-		utils.GetEnv("DB_PORT"),
+		config.GetEnv("DB_HOST"),
+		config.GetEnv("DB_USER"),
+		config.GetEnv("DB_PASS"),
+		config.GetEnv("DB_NAME"),
+		config.GetEnv("DB_PORT"),
 	)
 
 	// Open connection
