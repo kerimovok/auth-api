@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	pkgNet "github.com/kerimovok/go-pkg-utils/net"
 
 	"errors"
 
@@ -76,13 +74,52 @@ func (s *TokenService) RevokeAllUserTokensExcept(userID uuid.UUID, tokenType con
 	return nil
 }
 
-func (s *TokenService) createToken(user models.User, tokenType constants.TokenType, expiry time.Duration, userAgent string, c *fiber.Ctx) (*models.Token, error) {
+// GetTokenConfig returns the configuration for a specific token type
+func (s *TokenService) GetTokenConfig(tokenType constants.TokenType) (*config.TokenConfig, error) {
+	if !constants.IsValidTokenType(tokenType) {
+		return nil, fmt.Errorf("invalid token type: %s", tokenType)
+	}
+
+	switch tokenType {
+	case constants.RefreshToken:
+		return &config.Auth.Tokens.RefreshToken, nil
+	case constants.EmailVerificationToken:
+		return &config.Auth.Tokens.EmailVerification, nil
+	case constants.PasswordResetToken:
+		return &config.Auth.Tokens.PasswordReset, nil
+	default:
+		return nil, fmt.Errorf("token type %s not configured", tokenType)
+	}
+}
+
+// CreateToken creates a token of any type using unified configuration
+func (s *TokenService) CreateToken(user models.User, tokenType constants.TokenType, userAgent string, ip string) (*models.Token, error) {
+	tokenConfig, err := s.GetTokenConfig(tokenType)
+	if err != nil {
+		return nil, err
+	}
+
+	expiry, err := time.ParseDuration(tokenConfig.Expiry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse %s token expiry: %w", tokenType, err)
+	}
+
+	if tokenConfig.RevokeExisting {
+		if err := s.RevokeAllUserTokens(user.ID, tokenType); err != nil {
+			return nil, fmt.Errorf("failed to revoke existing %s tokens: %w", tokenType, err)
+		}
+	}
+
+	return s.createToken(user, tokenType, expiry, userAgent, ip)
+}
+
+func (s *TokenService) createToken(user models.User, tokenType constants.TokenType, expiry time.Duration, userAgent string, ip string) (*models.Token, error) {
 	token := &models.Token{
 		UserID:    user.ID,
 		Type:      string(tokenType),
 		ExpiresAt: time.Now().Add(expiry),
 		UserAgent: userAgent,
-		IP:        pkgNet.GetUserIP(c),
+		IP:        ip,
 	}
 
 	if err := s.db.Create(token).Error; err != nil {
@@ -92,49 +129,70 @@ func (s *TokenService) createToken(user models.User, tokenType constants.TokenTy
 	return token, nil
 }
 
-func (s *TokenService) CreateAuthTokenForUser(user models.User, userAgent string, c *fiber.Ctx) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.Auth.Token.Auth.Expiry)
+func (s *TokenService) CreateRefreshToken(user models.User, userAgent string, ip string) (*models.Token, error) {
+	// Use unified token creation but add family tracking for refresh tokens
+	token, err := s.CreateToken(user, constants.RefreshToken, userAgent, ip)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse auth token expiry: %w", err)
+		return nil, err
 	}
 
-	if config.Auth.Token.Auth.RevokeExisting {
-		if err := s.RevokeAllUserTokens(user.ID, constants.AuthToken); err != nil {
-			return nil, fmt.Errorf("failed to revoke existing auth tokens: %w", err)
-		}
+	// Add family tracking for refresh tokens (rotation security)
+	familyID := uuid.New()
+	token.Family = &familyID
+	token.ParentID = nil // Initial token has no parent
+
+	if err := s.db.Save(token).Error; err != nil {
+		return nil, fmt.Errorf("failed to update refresh token family: %w", err)
 	}
 
-	return s.createToken(user, constants.AuthToken, expiry, userAgent, c)
+	return token, nil
 }
 
-func (s *TokenService) CreateEmailVerificationToken(user models.User, userAgent string, c *fiber.Ctx) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.Auth.Token.Verification.Expiry)
+// RotateRefreshToken creates a new refresh token from an existing one with family tracking
+func (s *TokenService) RotateRefreshToken(oldToken *models.Token, userAgent string, ip string) (*models.Token, error) {
+	expiry, err := time.ParseDuration(config.Auth.Tokens.RefreshToken.Expiry)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse verification token expiry: %w", err)
+		return nil, fmt.Errorf("failed to parse refresh token expiry: %w", err)
 	}
 
-	if config.Auth.Token.Verification.RevokeExisting {
-		if err := s.RevokeAllUserTokens(user.ID, constants.EmailVerificationToken); err != nil {
-			return nil, fmt.Errorf("failed to revoke existing verification tokens: %w", err)
-		}
+	// Create new token in the same family
+	newToken := &models.Token{
+		UserID:    oldToken.UserID,
+		Type:      string(constants.RefreshToken),
+		ExpiresAt: time.Now().Add(expiry),
+		UserAgent: userAgent,
+		IP:        ip,
+		Family:    oldToken.Family, // Same family as parent
+		ParentID:  &oldToken.ID,    // Link to parent token
 	}
 
-	return s.createToken(user, constants.EmailVerificationToken, expiry, userAgent, c)
+	if err := s.db.Create(newToken).Error; err != nil {
+		return nil, fmt.Errorf("failed to create rotated refresh token: %w", err)
+	}
+
+	return newToken, nil
 }
 
-func (s *TokenService) CreatePasswordResetToken(user models.User, userAgent string, c *fiber.Ctx) (*models.Token, error) {
-	expiry, err := time.ParseDuration(config.Auth.Token.PasswordReset.Expiry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse password reset token expiry: %w", err)
+// RevokeTokenFamily revokes all tokens in a family (security breach detection)
+func (s *TokenService) RevokeTokenFamily(familyID uuid.UUID) error {
+	now := time.Now()
+	result := s.db.Model(&models.Token{}).
+		Where("family = ? AND revoked_at IS NULL", familyID).
+		Update("revoked_at", &now)
+
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("failed to revoke token family: %w", result.Error)
 	}
 
-	if config.Auth.Token.PasswordReset.RevokeExisting {
-		if err := s.RevokeAllUserTokens(user.ID, constants.PasswordResetToken); err != nil {
-			return nil, fmt.Errorf("failed to revoke existing password reset tokens: %w", err)
-		}
-	}
+	return nil
+}
 
-	return s.createToken(user, constants.PasswordResetToken, expiry, userAgent, c)
+func (s *TokenService) CreateEmailVerificationToken(user models.User, userAgent string, ip string) (*models.Token, error) {
+	return s.CreateToken(user, constants.EmailVerificationToken, userAgent, ip)
+}
+
+func (s *TokenService) CreatePasswordResetToken(user models.User, userAgent string, ip string) (*models.Token, error) {
+	return s.CreateToken(user, constants.PasswordResetToken, userAgent, ip)
 }
 
 // CleanupExpiredTokens removes expired and revoked tokens

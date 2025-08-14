@@ -22,6 +22,7 @@ func SetupRoutes(app *fiber.App) {
 	// Public auth routes
 	auth.Post("/register", handlers.Register)
 	auth.Post("/login", handlers.Login)
+	auth.Post("/refresh-token", handlers.RefreshToken)
 	auth.Post("/request-password-reset", handlers.RequestPasswordReset)
 	auth.Post("/reset-password", handlers.ResetPassword)
 	auth.Get("/confirm-email", handlers.ConfirmEmail)

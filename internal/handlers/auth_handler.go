@@ -18,6 +18,7 @@ import (
 	"github.com/kerimovok/go-pkg-database/sql"
 	"github.com/kerimovok/go-pkg-utils/crypto"
 	"github.com/kerimovok/go-pkg-utils/httpx"
+	pkgNet "github.com/kerimovok/go-pkg-utils/net"
 	"github.com/kerimovok/go-pkg-utils/validator"
 	"gorm.io/gorm"
 )
@@ -78,7 +79,7 @@ func Register(c *fiber.Ctx) error {
 
 		if config.Auth.Verification {
 			tokenService := services.NewTokenService()
-			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), c)
+			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), pkgNet.GetUserIP(c))
 			if err != nil {
 				return fmt.Errorf("failed to create verification token: %w", err)
 			}
@@ -140,15 +141,15 @@ func Login(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	var token *models.Token
+	var tokenResponse *services.TokenResponse
 	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
-		tokenService := services.NewTokenService()
+		jwtService := services.NewJWTService()
 
-		// Create new token
+		// Generate JWT access token and refresh token
 		var err error
-		token, err = tokenService.CreateAuthTokenForUser(user, c.Get("User-Agent"), c)
+		tokenResponse, _, err = jwtService.GenerateTokenPair(user, c.Get("User-Agent"), pkgNet.GetUserIP(c))
 		if err != nil {
-			return fmt.Errorf("failed to create auth token: %w", err)
+			return fmt.Errorf("failed to generate token pair: %w", err)
 		}
 
 		// Update last login time
@@ -165,9 +166,7 @@ func Login(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	response := httpx.OK(config.Messages.Auth.Success.Login, fiber.Map{
-		"token": token.ID,
-	})
+	response := httpx.OK(config.Messages.Auth.Success.Login, tokenResponse)
 	return httpx.SendResponse(c, response)
 }
 
@@ -247,7 +246,7 @@ func RequestPasswordReset(c *fiber.Ctx) error {
 		// Generate new token
 		tokenService := services.NewTokenService()
 		var err error
-		token, err = tokenService.CreatePasswordResetToken(user, c.Get("User-Agent"), c)
+		token, err = tokenService.CreatePasswordResetToken(user, c.Get("User-Agent"), pkgNet.GetUserIP(c))
 		if err != nil {
 			return fmt.Errorf("failed to create password reset token: %w", err)
 		}
@@ -393,10 +392,9 @@ func ChangePassword(c *fiber.Ctx) error {
 		}
 
 		if !config.Auth.Allow.ConcurrentLogins {
-			currentToken := c.Locals("token").(*models.Token)
 			tokenService := services.NewTokenService()
-			if err := tokenService.RevokeAllUserTokensExcept(user.ID, constants.AuthToken, currentToken.ID); err != nil {
-				return fmt.Errorf("failed to revoke tokens: %w", err)
+			if err := tokenService.RevokeAllUserTokens(user.ID, constants.RefreshToken); err != nil {
+				return fmt.Errorf("failed to revoke refresh tokens: %w", err)
 			}
 		}
 
@@ -452,7 +450,7 @@ func ChangeEmail(c *fiber.Ctx) error {
 		if config.Auth.Verification {
 			tokenService := services.NewTokenService()
 			var err error
-			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), c)
+			token, err = tokenService.CreateEmailVerificationToken(user, c.Get("User-Agent"), pkgNet.GetUserIP(c))
 			if err != nil {
 				return fmt.Errorf("failed to create verification token: %w", err)
 			}
@@ -517,11 +515,18 @@ func DeleteAccount(c *fiber.Ctx) error {
 	}
 
 	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
-		// Revoke all tokens first
-		if err := tx.Model(&models.Token{}).
-			Where("user_id = ? AND revoked_at IS NULL", user.ID).
-			Update("revoked_at", time.Now()).Error; err != nil {
-			return fmt.Errorf("failed to revoke tokens: %w", err)
+		// Revoke all refresh tokens first
+		tokenService := services.NewTokenService()
+		if err := tokenService.RevokeAllUserTokens(user.ID, constants.RefreshToken); err != nil {
+			return fmt.Errorf("failed to revoke refresh tokens: %w", err)
+		}
+
+		// Also revoke other tokens (verification, password reset)
+		if err := tokenService.RevokeAllUserTokens(user.ID, constants.EmailVerificationToken); err != nil {
+			return fmt.Errorf("failed to revoke verification tokens: %w", err)
+		}
+		if err := tokenService.RevokeAllUserTokens(user.ID, constants.PasswordResetToken); err != nil {
+			return fmt.Errorf("failed to revoke password reset tokens: %w", err)
 		}
 
 		// Delete user (using soft delete if configured)
@@ -542,14 +547,15 @@ func DeleteAccount(c *fiber.Ctx) error {
 	return httpx.SendResponse(c, response)
 }
 
-// Logout handles user logout by revoking the auth token
+// Logout handles user logout by revoking refresh tokens
 func Logout(c *fiber.Ctx) error {
-	token := c.Locals("token").(*models.Token)
+	user := c.Locals("user").(models.User)
 
 	err := sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
-		// Revoke the current token
-		if err := tx.Model(token).Update("revoked_at", time.Now()).Error; err != nil {
-			return fmt.Errorf("failed to revoke token: %w", err)
+		tokenService := services.NewTokenService()
+		// Revoke all refresh tokens for this user
+		if err := tokenService.RevokeAllUserTokens(user.ID, constants.RefreshToken); err != nil {
+			return fmt.Errorf("failed to revoke refresh tokens: %w", err)
 		}
 		return nil
 	})
@@ -561,5 +567,93 @@ func Logout(c *fiber.Ctx) error {
 	}
 
 	response := httpx.OK(config.Messages.Auth.Success.Logout, nil)
+	return httpx.SendResponse(c, response)
+}
+
+// RefreshToken handles token refresh using a refresh token
+func RefreshToken(c *fiber.Ctx) error {
+	var input requests.RefreshTokenRequest
+
+	if err := c.BodyParser(&input); err != nil {
+		response := httpx.BadRequest(config.Messages.Validation.Error.InvalidRequest, err)
+		return httpx.SendResponse(c, response)
+	}
+
+	if err := validator.ValidateStruct(&input); err != nil {
+		response := httpx.BadRequest(config.Messages.Validation.Error.InvalidRequest, err)
+		return httpx.SendResponse(c, response)
+	}
+
+	// Parse refresh token ID
+	refreshTokenID, err := uuid.Parse(input.RefreshToken)
+	if err != nil {
+		response := httpx.BadRequest(config.Messages.Auth.Error.InvalidToken, err)
+		return httpx.SendResponse(c, response)
+	}
+
+	// Validate refresh token
+	tokenService := services.NewTokenService()
+	refreshToken, err := tokenService.ValidateToken(refreshTokenID, constants.RefreshToken)
+	if err != nil {
+		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
+		return httpx.SendResponse(c, response)
+	}
+
+	// Get user
+	var user models.User
+	if err := database.DB.First(&user, "id = ?", refreshToken.UserID).Error; err != nil {
+		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
+		return httpx.SendResponse(c, response)
+	}
+
+	// Check if user is blocked
+	if user.IsBlocked {
+		// Revoke entire token family for blocked user
+		if refreshToken.Family != nil {
+			if err := tokenService.RevokeTokenFamily(*refreshToken.Family); err != nil {
+				log.Printf("Failed to revoke token family for blocked user: %v", err)
+			}
+		}
+		response := httpx.Forbidden(config.Messages.Auth.Error.AccountBlocked)
+		return httpx.SendResponse(c, response)
+	}
+
+	// Check for token reuse (security breach detection)
+	if refreshToken.RevokedAt != nil {
+		log.Printf("Detected refresh token reuse for user %s, revoking token family", user.ID)
+		if refreshToken.Family != nil {
+			if err := tokenService.RevokeTokenFamily(*refreshToken.Family); err != nil {
+				log.Printf("Failed to revoke token family after reuse detection: %v", err)
+			}
+		}
+		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
+		return httpx.SendResponse(c, response)
+	}
+
+	var tokenResponse *services.TokenResponse
+	err = sql.WithTransaction(database.DB, func(tx *gorm.DB) error {
+		// Generate new token pair with rotation
+		jwtService := services.NewJWTService()
+		var err error
+		tokenResponse, err = jwtService.RefreshTokenPair(refreshToken, c.Get("User-Agent"), pkgNet.GetUserIP(c))
+		if err != nil {
+			return fmt.Errorf("failed to refresh token pair: %w", err)
+		}
+
+		// Revoke the old refresh token
+		if err := tokenService.RevokeToken(refreshToken.ID); err != nil {
+			return fmt.Errorf("failed to revoke old refresh token: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("failed to refresh token: %v", err)
+		response := httpx.InternalServerError(config.Messages.Server.Error.Internal, err)
+		return httpx.SendResponse(c, response)
+	}
+
+	response := httpx.OK("Token refreshed successfully", tokenResponse)
 	return httpx.SendResponse(c, response)
 }

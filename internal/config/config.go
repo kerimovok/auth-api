@@ -11,15 +11,17 @@ import (
 
 type TokenConfig struct {
 	Expiry         string `yaml:"expiry"`
+	Type           string `yaml:"type"` // "jwt" or "database"
 	RevokeExisting bool   `yaml:"revoke_existing"`
 }
 
 type AuthConfig struct {
-	Token struct {
-		Auth          TokenConfig `yaml:"auth"`
-		Verification  TokenConfig `yaml:"verification"`
-		PasswordReset TokenConfig `yaml:"password_reset"`
-	} `yaml:"token"`
+	Tokens struct {
+		AccessToken       TokenConfig `yaml:"access_token"`
+		RefreshToken      TokenConfig `yaml:"refresh_token"`
+		EmailVerification TokenConfig `yaml:"email_verification"`
+		PasswordReset     TokenConfig `yaml:"password_reset"`
+	} `yaml:"tokens"`
 	Verification bool `yaml:"verification"`
 	RedirectURLs struct {
 		Verification  string `yaml:"verification"`

@@ -10,39 +10,55 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/kerimovok/go-pkg-utils/httpx"
 )
 
 // RequireAuth middleware for routes that require authentication
 func RequireAuth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tokenID, err := extractTokenID(c)
+		tokenString, err := extractTokenString(c)
 		if err != nil {
 			response := httpx.Unauthorized(config.Messages.Auth.Error.TokenRequired)
 			return httpx.SendResponse(c, response)
 		}
 
-		tokenService := services.NewTokenService()
-		token, err := tokenService.ValidateToken(tokenID, constants.AuthToken)
+		jwtService := services.NewJWTService()
+		claims, err := jwtService.ValidateAccessToken(tokenString)
 		if err != nil {
 			response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
 			return httpx.SendResponse(c, response)
 		}
 
-		var user models.User
-		if err := database.DB.First(&user, "id = ?", token.UserID).Error; err != nil {
+		// Create user from JWT claims (avoiding database query)
+		user := models.User{
+			Email:      claims.Email,
+			IsAdmin:    claims.IsAdmin,
+			IsVerified: claims.IsVerified,
+		}
+		user.ID = claims.UserID
+
+		// Only check database for critical security status (blocking)
+		var isBlocked bool
+		err = database.DB.Model(&models.User{}).
+			Select("is_blocked").
+			Where("id = ?", claims.UserID).
+			Scan(&isBlocked).Error
+
+		if err != nil {
 			response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
 			return httpx.SendResponse(c, response)
 		}
 
-		if err := validateUser(user, tokenService); err != nil {
+		if isBlocked {
+			// User is blocked, revoke refresh tokens and deny access
+			tokenService := services.NewTokenService()
+			tokenService.RevokeAllUserTokens(user.ID, constants.RefreshToken)
 			response := httpx.Forbidden(config.Messages.Auth.Error.AccountBlocked)
 			return httpx.SendResponse(c, response)
 		}
 
 		c.Locals("user", user)
-		c.Locals("token", token)
+		c.Locals("claims", claims)
 		return c.Next()
 	}
 }
@@ -76,22 +92,11 @@ func RequireAdmin() fiber.Handler {
 }
 
 // Add helper for token extraction
-func extractTokenID(c *fiber.Ctx) (uuid.UUID, error) {
+func extractTokenString(c *fiber.Ctx) (string, error) {
 	tokenHeader := c.Get("Authorization")
 	if tokenHeader == "" || !strings.HasPrefix(tokenHeader, "Bearer ") {
-		return uuid.Nil, fmt.Errorf("token required")
+		return "", fmt.Errorf("token required")
 	}
 
-	return uuid.Parse(strings.TrimPrefix(tokenHeader, "Bearer "))
-}
-
-// Add helper for user validation
-func validateUser(user models.User, tokenService *services.TokenService) error {
-	if user.IsBlocked {
-		if err := tokenService.RevokeAllUserTokens(user.ID, constants.AuthToken); err != nil {
-			return fmt.Errorf("failed to revoke tokens for blocked user: %w", err)
-		}
-		return fmt.Errorf("account blocked")
-	}
-	return nil
+	return strings.TrimPrefix(tokenHeader, "Bearer "), nil
 }

@@ -32,3 +32,7 @@ type ChangeEmailRequest struct {
 type DeleteAccountRequest struct {
 	Password string `json:"password" validate:"required"`
 }
+
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required,uuid"`
+}

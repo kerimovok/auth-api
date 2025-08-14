@@ -49,6 +49,13 @@ var EnvValidationRules = []validator.ValidationRule{
 		Message:  "database name is required",
 	},
 
+	// JWT validation
+	{
+		Variable: "JWT_SECRET",
+		Rule:     func(v string) bool { return len(v) >= 32 },
+		Message:  "JWT secret is required and must be at least 32 characters long",
+	},
+
 	// Mailer validation
 	{
 		Variable: "MAILER_URI",

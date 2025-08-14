@@ -87,7 +87,7 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 			"subject":   config.Mailer.Subjects.Verification,
 			"email":     email,
 			"url":       verifyURL,
-			"expiry":    config.Auth.Token.Verification.Expiry,
+			"expiry":    config.Auth.Tokens.EmailVerification.Expiry,
 			"expiresAt": token.ExpiresAt.Format(time.Stamp),
 		},
 	})
@@ -108,7 +108,7 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 			"subject":   config.Mailer.Subjects.Reset,
 			"email":     email,
 			"url":       resetURL,
-			"expiry":    config.Auth.Token.Verification.Expiry,
+			"expiry":    config.Auth.Tokens.PasswordReset.Expiry,
 			"expiresAt": token.ExpiresAt.Format(time.Stamp),
 		},
 	})

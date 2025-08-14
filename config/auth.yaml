@@ -1,13 +1,19 @@
-token:
-    auth:
-        expiry: '24h'
-        revoke_existing: false
-    verification:
-        expiry: '24h'
-        revoke_existing: true
+tokens:
+    access_token:
+        expiry: '15m' # Short-lived JWT access tokens
+        type: 'jwt' # JWT (stateless) vs 'database' (stateful)
+    refresh_token:
+        expiry: '7d' # Long-lived refresh tokens
+        type: 'database' # Stored in database for revocation
+        revoke_existing: false # Allow multiple concurrent sessions
+    email_verification:
+        expiry: '24h' # Email verification tokens
+        type: 'database' # Stored in database
+        revoke_existing: true # Only one verification token at a time
     password_reset:
-        expiry: '1h'
-        revoke_existing: true
+        expiry: '1h' # Password reset tokens
+        type: 'database' # Stored in database
+        revoke_existing: true # Only one reset token at a time
 verification: true # When false, users can login without verifying their email
 redirect_urls:
     verification: 'https://example.com/verify'
