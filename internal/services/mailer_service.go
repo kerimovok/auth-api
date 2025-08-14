@@ -3,72 +3,18 @@ package services
 import (
 	"auth-api/internal/config"
 	"auth-api/internal/models"
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
-
-	pkgConfig "github.com/kerimovok/go-pkg-utils/config"
 )
 
-type MailRequest struct {
-	From     string                 `json:"from"`
-	To       string                 `json:"to"`
-	Subject  string                 `json:"subject"`
-	Template string                 `json:"template"`
-	Data     map[string]interface{} `json:"data"`
-}
-
 type MailerService struct {
-	client  *http.Client
-	baseURL string
+	queueService *QueueService
 }
 
 func NewMailerService() *MailerService {
 	return &MailerService{
-		client:  &http.Client{},
-		baseURL: pkgConfig.GetEnv("MAILER_URI"),
+		queueService: NewQueueService(),
 	}
-}
-
-func (m *MailerService) SendMail(req MailRequest) error {
-	// Prepare request body
-	body := new(bytes.Buffer)
-	if err := json.NewEncoder(body).Encode(req); err != nil {
-		return fmt.Errorf("failed to encode mail request: %w", err)
-	}
-
-	// Create HTTP request
-	httpReq, err := http.NewRequest(http.MethodPost, m.baseURL, body)
-	if err != nil {
-		return fmt.Errorf("failed to create mail request: %w", err)
-	}
-
-	// Set headers
-	httpReq.Header.Set("Content-Type", "application/json")
-	if config.Mailer.Auth.Enabled {
-		httpReq.Header.Set(
-			config.Mailer.Auth.Header.Key,
-			config.Mailer.Auth.Header.Value,
-		)
-	}
-
-	// Send request
-	resp, err := m.client.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("failed to send mail request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Check response status
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("mail service returned status %d: %s", resp.StatusCode, body)
-	}
-
-	return nil
 }
 
 // Helper methods for specific email types
@@ -78,11 +24,11 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 		token.ID.String(),
 	)
 
-	return m.SendMail(MailRequest{
-		From:     config.Mailer.From,
+	emailTask := &EmailTask{
 		To:       email,
 		Subject:  config.Mailer.Subjects.Verification,
 		Template: config.Mailer.Templates.Verification,
+		Type:     "verification",
 		Data: map[string]interface{}{
 			"subject":   config.Mailer.Subjects.Verification,
 			"email":     email,
@@ -90,7 +36,9 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 			"expiry":    config.Auth.Tokens.EmailVerification.Expiry,
 			"expiresAt": token.ExpiresAt.Format(time.Stamp),
 		},
-	})
+	}
+
+	return m.queueService.PublishEmailTask(emailTask)
 }
 
 func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token) error {
@@ -99,11 +47,11 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 		token.ID.String(),
 	)
 
-	return m.SendMail(MailRequest{
-		From:     config.Mailer.From,
+	emailTask := &EmailTask{
 		To:       email,
 		Subject:  config.Mailer.Subjects.Reset,
 		Template: config.Mailer.Templates.Reset,
+		Type:     "password_reset",
 		Data: map[string]interface{}{
 			"subject":   config.Mailer.Subjects.Reset,
 			"email":     email,
@@ -111,5 +59,11 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 			"expiry":    config.Auth.Tokens.PasswordReset.Expiry,
 			"expiresAt": token.ExpiresAt.Format(time.Stamp),
 		},
-	})
+	}
+
+	return m.queueService.PublishEmailTask(emailTask)
+}
+
+func (m *MailerService) Close() error {
+	return m.queueService.Close()
 }

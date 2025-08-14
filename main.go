@@ -5,7 +5,11 @@ import (
 	"auth-api/internal/constants"
 	"auth-api/internal/database"
 	"auth-api/internal/routes"
+	"auth-api/internal/services"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -57,7 +61,24 @@ func setupApp() *fiber.App {
 func main() {
 	app := setupApp()
 
+	// Initialize queue service
+	queueService := services.NewQueueService()
+	defer queueService.Close()
+
 	routes.SetupRoutes(app)
+
+	// Graceful shutdown channel
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-quit
+		log.Println("shutting down server...")
+
+		if err := app.Shutdown(); err != nil {
+			log.Fatalf("server forced to shutdown: %v", err)
+		}
+	}()
 
 	log.Fatalf("failed to start server: %v", app.Listen(":"+pkgConfig.GetEnv("PORT")))
 }

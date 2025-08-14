@@ -9,6 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/kerimovok/go-pkg-database v1.0.0
 	github.com/kerimovok/go-pkg-utils v1.0.0
+	github.com/rabbitmq/amqp091-go v1.10.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/gorm v1.25.12
 )
