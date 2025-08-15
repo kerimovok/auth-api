@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
+	"github.com/kerimovok/go-pkg-utils/config"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -18,11 +18,11 @@ type Producer struct {
 
 func NewProducer() *Producer {
 	// Get RabbitMQ connection details from environment variables
-	host := getEnvOrDefault("RABBITMQ_HOST", "localhost")
-	port := getEnvOrDefault("RABBITMQ_PORT", "5672")
-	username := getEnvOrDefault("RABBITMQ_USERNAME", "guest")
-	password := getEnvOrDefault("RABBITMQ_PASSWORD", "guest")
-	vhost := getEnvOrDefault("RABBITMQ_VHOST", "/")
+	host := config.GetEnvOrDefault("RABBITMQ_HOST", "localhost")
+	port := config.GetEnvOrDefault("RABBITMQ_PORT", "5672")
+	username := config.GetEnvOrDefault("RABBITMQ_USERNAME", "guest")
+	password := config.GetEnvOrDefault("RABBITMQ_PASSWORD", "guest")
+	vhost := config.GetEnvOrDefault("RABBITMQ_VHOST", "/")
 
 	// Connect to RabbitMQ
 	url := fmt.Sprintf("amqp://%s:%s@%s:%s/%s",
@@ -136,14 +136,6 @@ type EmailTask struct {
 	Type     string                 `json:"type"` // "verification", "password_reset", etc.
 }
 
-// getEnvOrDefault gets an environment variable or returns a default value
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
 // setupConnectionRecovery sets up automatic reconnection for RabbitMQ
 func (p *Producer) setupConnectionRecovery() {
 	// Monitor connection for errors
@@ -184,11 +176,11 @@ func (p *Producer) reconnect() {
 		time.Sleep(5 * time.Second)
 
 		// Attempt to reconnect
-		host := getEnvOrDefault("RABBITMQ_HOST", "localhost")
-		port := getEnvOrDefault("RABBITMQ_PORT", "5672")
-		username := getEnvOrDefault("RABBITMQ_USERNAME", "guest")
-		password := getEnvOrDefault("RABBITMQ_PASSWORD", "guest")
-		vhost := getEnvOrDefault("RABBITMQ_VHOST", "/")
+		host := config.GetEnvOrDefault("RABBITMQ_HOST", "localhost")
+		port := config.GetEnvOrDefault("RABBITMQ_PORT", "5672")
+		username := config.GetEnvOrDefault("RABBITMQ_USERNAME", "guest")
+		password := config.GetEnvOrDefault("RABBITMQ_PASSWORD", "guest")
+		vhost := config.GetEnvOrDefault("RABBITMQ_VHOST", "/")
 
 		url := fmt.Sprintf("amqp://%s:%s@%s:%s/%s",
 			username, password, host, port, vhost,
