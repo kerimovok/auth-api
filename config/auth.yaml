@@ -3,7 +3,7 @@ tokens:
         expiry: '15m' # Short-lived JWT access tokens
         type: 'jwt' # JWT (stateless) vs 'database' (stateful)
     refresh_token:
-        expiry: '7d' # Long-lived refresh tokens
+        expiry: '168h' # Long-lived refresh tokens (7 days = 168 hours)
         type: 'database' # Stored in database for revocation
         revoke_existing: false # Allow multiple concurrent sessions
     email_verification:
