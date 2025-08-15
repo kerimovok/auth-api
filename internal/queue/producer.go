@@ -1,4 +1,4 @@
-package services
+package queue
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type QueueService struct {
+type Producer struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
 }
 
-func NewQueueService() *QueueService {
+func NewProducer() *Producer {
 	// Get RabbitMQ connection details from environment variables
 	host := getEnvOrDefault("RABBITMQ_HOST", "localhost")
 	port := getEnvOrDefault("RABBITMQ_PORT", "5672")
@@ -82,18 +82,18 @@ func NewQueueService() *QueueService {
 		log.Fatalf("Failed to bind queue: %v", err)
 	}
 
-	service := &QueueService{
+	producer := &Producer{
 		conn:    conn,
 		channel: ch,
 	}
 
 	// Setup connection recovery
-	service.setupConnectionRecovery()
+	producer.setupConnectionRecovery()
 
-	return service
+	return producer
 }
 
-func (q *QueueService) PublishEmailTask(emailTask *EmailTask) error {
+func (p *Producer) PublishEmailTask(emailTask *EmailTask) error {
 	payload, err := json.Marshal(emailTask)
 	if err != nil {
 		return fmt.Errorf("failed to marshal email task: %w", err)
@@ -102,7 +102,7 @@ func (q *QueueService) PublishEmailTask(emailTask *EmailTask) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = q.channel.PublishWithContext(ctx,
+	err = p.channel.PublishWithContext(ctx,
 		"mailer", // exchange
 		"email",  // routing key
 		false,    // mandatory
@@ -120,11 +120,11 @@ func (q *QueueService) PublishEmailTask(emailTask *EmailTask) error {
 	return nil
 }
 
-func (q *QueueService) Close() error {
-	if err := q.channel.Close(); err != nil {
+func (p *Producer) Close() error {
+	if err := p.channel.Close(); err != nil {
 		return err
 	}
-	return q.conn.Close()
+	return p.conn.Close()
 }
 
 // EmailTask represents the structure of an email task to be sent to the queue
@@ -145,39 +145,39 @@ func getEnvOrDefault(key, defaultValue string) string {
 }
 
 // setupConnectionRecovery sets up automatic reconnection for RabbitMQ
-func (q *QueueService) setupConnectionRecovery() {
+func (p *Producer) setupConnectionRecovery() {
 	// Monitor connection for errors
 	go func() {
-		for err := range q.conn.NotifyClose(make(chan *amqp.Error)) {
+		for err := range p.conn.NotifyClose(make(chan *amqp.Error)) {
 			if err != nil {
 				log.Printf("RabbitMQ connection lost: %v, attempting to reconnect...", err)
-				q.reconnect()
+				p.reconnect()
 			}
 		}
 	}()
 
 	// Monitor channel for errors
 	go func() {
-		for err := range q.channel.NotifyClose(make(chan *amqp.Error)) {
+		for err := range p.channel.NotifyClose(make(chan *amqp.Error)) {
 			if err != nil {
 				log.Printf("RabbitMQ channel lost: %v, attempting to reconnect...", err)
-				q.reconnect()
+				p.reconnect()
 			}
 		}
 	}()
 }
 
 // reconnect attempts to reconnect to RabbitMQ
-func (q *QueueService) reconnect() {
+func (p *Producer) reconnect() {
 	for {
 		log.Println("Attempting to reconnect to RabbitMQ...")
 
 		// Close existing connections
-		if q.channel != nil {
-			q.channel.Close()
+		if p.channel != nil {
+			p.channel.Close()
 		}
-		if q.conn != nil {
-			q.conn.Close()
+		if p.conn != nil {
+			p.conn.Close()
 		}
 
 		// Wait before retry
@@ -229,9 +229,9 @@ func (q *QueueService) reconnect() {
 			continue
 		}
 
-		// Update service with new connections
-		q.conn = conn
-		q.channel = ch
+		// Update producer with new connections
+		p.conn = conn
+		p.channel = ch
 		log.Println("Successfully reconnected to RabbitMQ")
 		break
 	}

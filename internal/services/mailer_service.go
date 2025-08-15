@@ -3,17 +3,18 @@ package services
 import (
 	"auth-api/internal/config"
 	"auth-api/internal/models"
+	"auth-api/internal/queue"
 	"fmt"
 	"time"
 )
 
 type MailerService struct {
-	queueService *QueueService
+	queueProducer *queue.Producer
 }
 
 func NewMailerService() *MailerService {
 	return &MailerService{
-		queueService: NewQueueService(),
+		queueProducer: queue.NewProducer(),
 	}
 }
 
@@ -24,7 +25,7 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 		token.ID.String(),
 	)
 
-	emailTask := &EmailTask{
+	emailTask := &queue.EmailTask{
 		To:       email,
 		Subject:  config.Mailer.Subjects.Verification,
 		Template: config.Mailer.Templates.Verification,
@@ -38,7 +39,7 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 		},
 	}
 
-	return m.queueService.PublishEmailTask(emailTask)
+	return m.queueProducer.PublishEmailTask(emailTask)
 }
 
 func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token) error {
@@ -47,7 +48,7 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 		token.ID.String(),
 	)
 
-	emailTask := &EmailTask{
+	emailTask := &queue.EmailTask{
 		To:       email,
 		Subject:  config.Mailer.Subjects.Reset,
 		Template: config.Mailer.Templates.Reset,
@@ -61,9 +62,9 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 		},
 	}
 
-	return m.queueService.PublishEmailTask(emailTask)
+	return m.queueProducer.PublishEmailTask(emailTask)
 }
 
 func (m *MailerService) Close() error {
-	return m.queueService.Close()
+	return m.queueProducer.Close()
 }

@@ -4,8 +4,8 @@ import (
 	"auth-api/internal/config"
 	"auth-api/internal/constants"
 	"auth-api/internal/database"
+	"auth-api/internal/queue"
 	"auth-api/internal/routes"
-	"auth-api/internal/services"
 	"log"
 	"os"
 	"os/signal"
@@ -61,9 +61,9 @@ func setupApp() *fiber.App {
 func main() {
 	app := setupApp()
 
-	// Initialize queue service
-	queueService := services.NewQueueService()
-	defer queueService.Close()
+	// Initialize queue producer
+	queueProducer := queue.NewProducer()
+	defer queueProducer.Close()
 
 	routes.SetupRoutes(app)
 
