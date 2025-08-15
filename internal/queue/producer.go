@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/kerimovok/go-pkg-utils/config"
@@ -14,6 +15,7 @@ import (
 type Producer struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
+	mu      sync.RWMutex // Protect connection updates
 }
 
 func NewProducer() *Producer {
@@ -57,14 +59,18 @@ func NewProducer() *Producer {
 		log.Fatalf("Failed to declare exchange: %v", err)
 	}
 
-	// Declare queue
+	// Declare queue with same arguments as consumer
 	_, err = ch.QueueDeclare(
 		"email_queue", // name
 		true,          // durable
 		false,         // delete when unused
 		false,         // exclusive
 		false,         // no-wait
-		nil,           // arguments
+		amqp.Table{ // arguments for additional durability
+			"x-message-ttl":  int32(24 * 60 * 60 * 1000), // 24 hours TTL
+			"x-max-priority": int32(10),                  // Priority support
+			"x-overflow":     "drop-head",                // Drop oldest when full
+		},
 	)
 	if err != nil {
 		log.Fatalf("Failed to declare queue: %v", err)
@@ -94,6 +100,14 @@ func NewProducer() *Producer {
 }
 
 func (p *Producer) PublishEmailTask(emailTask *EmailTask) error {
+	// Check connection health before publishing
+	p.mu.RLock()
+	if p.conn == nil || p.conn.IsClosed() || p.channel == nil || p.channel.IsClosed() {
+		p.mu.RUnlock()
+		return fmt.Errorf("RabbitMQ connection is not available")
+	}
+	p.mu.RUnlock()
+
 	payload, err := json.Marshal(emailTask)
 	if err != nil {
 		return fmt.Errorf("failed to marshal email task: %w", err)
@@ -102,6 +116,7 @@ func (p *Producer) PublishEmailTask(emailTask *EmailTask) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	p.mu.RLock()
 	err = p.channel.PublishWithContext(ctx,
 		"mailer", // exchange
 		"email",  // routing key
@@ -112,6 +127,8 @@ func (p *Producer) PublishEmailTask(emailTask *EmailTask) error {
 			Body:         payload,
 			DeliveryMode: amqp.Persistent, // Make messages persistent
 		})
+	p.mu.RUnlock()
+
 	if err != nil {
 		return fmt.Errorf("failed to publish email task: %w", err)
 	}
@@ -121,6 +138,9 @@ func (p *Producer) PublishEmailTask(emailTask *EmailTask) error {
 }
 
 func (p *Producer) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if err := p.channel.Close(); err != nil {
 		return err
 	}
@@ -165,12 +185,14 @@ func (p *Producer) reconnect() {
 		log.Println("Attempting to reconnect to RabbitMQ...")
 
 		// Close existing connections
+		p.mu.Lock()
 		if p.channel != nil {
 			p.channel.Close()
 		}
 		if p.conn != nil {
 			p.conn.Close()
 		}
+		p.mu.Unlock()
 
 		// Wait before retry
 		time.Sleep(5 * time.Second)
@@ -207,7 +229,11 @@ func (p *Producer) reconnect() {
 			continue
 		}
 
-		if _, err := ch.QueueDeclare("email_queue", true, false, false, false, nil); err != nil {
+		if _, err := ch.QueueDeclare("email_queue", true, false, false, false, amqp.Table{
+			"x-message-ttl":  int32(24 * 60 * 60 * 1000), // 24 hours TTL
+			"x-max-priority": int32(10),                  // Priority support
+			"x-overflow":     "drop-head",                // Drop oldest when full
+		}); err != nil {
 			log.Printf("Failed to declare queue: %v, retrying in 5 seconds...", err)
 			ch.Close()
 			conn.Close()
@@ -222,8 +248,10 @@ func (p *Producer) reconnect() {
 		}
 
 		// Update producer with new connections
+		p.mu.Lock()
 		p.conn = conn
 		p.channel = ch
+		p.mu.Unlock()
 		log.Println("Successfully reconnected to RabbitMQ")
 		break
 	}
