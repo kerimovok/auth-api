@@ -49,15 +49,16 @@ type MailerConfig struct {
 			Value string `yaml:"value"`
 		} `yaml:"header"`
 	} `yaml:"auth"`
-	From      string `yaml:"from"`
 	Templates struct {
-		Verification string `yaml:"verification"`
-		Reset        string `yaml:"reset"`
+		Verification struct {
+			Name    string `yaml:"name"`
+			Subject string `yaml:"subject"`
+		} `yaml:"verification"`
+		Reset struct {
+			Name    string `yaml:"name"`
+			Subject string `yaml:"subject"`
+		} `yaml:"reset"`
 	} `yaml:"templates"`
-	Subjects struct {
-		Verification string `yaml:"verification"`
-		Reset        string `yaml:"reset"`
-	} `yaml:"subjects"`
 }
 
 type MessagesConfig struct {

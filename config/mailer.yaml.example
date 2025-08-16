@@ -1,0 +1,12 @@
+auth:
+    enabled: false
+    header:
+        key: 'X-API-Key' # Ex. 'X-API-Key'
+        value: 'mailer-api-key' # Ex. 'mailer-api-key'
+templates:
+    verification:
+        name: 'verify-email' # Template name for email verification
+        subject: 'Verify your email: {{.email}}'
+    reset:
+        name: 'reset-password' # Template name for password reset
+        subject: 'Password reset for: {{.email}}'

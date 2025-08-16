@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"auth-api/internal/config"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -37,19 +38,19 @@ func ValidatePasswordStrength(password string) error {
 	}
 
 	if config.Auth.PasswordStrength.RequireUppercase && !hasUpper {
-		return fmt.Errorf(config.Messages.Validation.Error.PasswordStrength.RequireUppercase)
+		return errors.New(config.Messages.Validation.Error.PasswordStrength.RequireUppercase)
 	}
 
 	if config.Auth.PasswordStrength.RequireLowercase && !hasLower {
-		return fmt.Errorf(config.Messages.Validation.Error.PasswordStrength.RequireLowercase)
+		return errors.New(config.Messages.Validation.Error.PasswordStrength.RequireLowercase)
 	}
 
 	if config.Auth.PasswordStrength.RequireNumbers && !hasNumber {
-		return fmt.Errorf(config.Messages.Validation.Error.PasswordStrength.RequireNumbers)
+		return errors.New(config.Messages.Validation.Error.PasswordStrength.RequireNumbers)
 	}
 
 	if config.Auth.PasswordStrength.RequireSpecial && !hasSpecial {
-		return fmt.Errorf(config.Messages.Validation.Error.PasswordStrength.RequireSpecial)
+		return errors.New(config.Messages.Validation.Error.PasswordStrength.RequireSpecial)
 	}
 
 	return nil

@@ -19,7 +19,7 @@ redirect_urls:
     verification: 'https://example.com/verify'
     password_reset: 'https://example.com/reset'
 allow:
-    # password_reset: true
+    password_reset: true
     concurrent_logins: true # When false, previous tokens are revoked on login
 password_strength:
     min_length: 8

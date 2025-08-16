@@ -27,11 +27,11 @@ func (m *MailerService) SendVerificationEmail(email string, token *models.Token)
 
 	emailTask := &queue.EmailTask{
 		To:       email,
-		Subject:  config.Mailer.Subjects.Verification,
-		Template: config.Mailer.Templates.Verification,
+		Subject:  config.Mailer.Templates.Verification.Subject,
+		Template: config.Mailer.Templates.Verification.Name,
 		Type:     "verification",
 		Data: map[string]interface{}{
-			"subject":   config.Mailer.Subjects.Verification,
+			"subject":   config.Mailer.Templates.Verification.Subject,
 			"email":     email,
 			"url":       verifyURL,
 			"expiry":    config.Auth.Tokens.EmailVerification.Expiry,
@@ -50,11 +50,11 @@ func (m *MailerService) SendPasswordResetEmail(email string, token *models.Token
 
 	emailTask := &queue.EmailTask{
 		To:       email,
-		Subject:  config.Mailer.Subjects.Reset,
-		Template: config.Mailer.Templates.Reset,
+		Subject:  config.Mailer.Templates.Reset.Subject,
+		Template: config.Mailer.Templates.Reset.Name,
 		Type:     "password_reset",
 		Data: map[string]interface{}{
-			"subject":   config.Mailer.Subjects.Reset,
+			"subject":   config.Mailer.Templates.Reset.Subject,
 			"email":     email,
 			"url":       resetURL,
 			"expiry":    config.Auth.Tokens.PasswordReset.Expiry,
