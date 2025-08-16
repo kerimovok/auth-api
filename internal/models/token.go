@@ -10,7 +10,8 @@ import (
 type Token struct {
 	sql.BaseModel
 	UserID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"userId"`
-	Type      string     `gorm:"not null" json:"type"` // refresh, email_verification, password_reset
+	Type      string     `gorm:"not null" json:"type"`              // refresh, email_verification, password_reset
+	Value     string     `gorm:"type:text;not null;index" json:"-"` // Actual token value, not exposed in JSON
 	ExpiresAt time.Time  `gorm:"not null;index" json:"expiresAt"`
 	RevokedAt *time.Time `gorm:"default:null" json:"revokedAt,omitempty"`
 	UserAgent string     `gorm:"type:text" json:"userAgent"`

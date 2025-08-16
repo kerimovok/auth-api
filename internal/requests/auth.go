@@ -15,7 +15,7 @@ type PasswordResetRequest struct {
 }
 
 type ResetPasswordRequest struct {
-	Token    string `json:"token" validate:"required,uuid"`
+	Token    string `json:"token" validate:"required"`
 	Password string `json:"password" validate:"required"`
 }
 
@@ -34,5 +34,5 @@ type DeleteAccountRequest struct {
 }
 
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required,uuid"`
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }

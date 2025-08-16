@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/kerimovok/go-pkg-database/sql"
 	"github.com/kerimovok/go-pkg-utils/crypto"
 	"github.com/kerimovok/go-pkg-utils/httpx"
@@ -172,14 +171,14 @@ func Login(c *fiber.Ctx) error {
 
 // ConfirmEmail handles email verification
 func ConfirmEmail(c *fiber.Ctx) error {
-	tokenID, err := uuid.Parse(c.Query("token"))
-	if err != nil {
-		response := httpx.BadRequest(config.Messages.Auth.Error.InvalidToken, err)
+	tokenValue := c.Query("token")
+	if tokenValue == "" {
+		response := httpx.BadRequest(config.Messages.Auth.Error.InvalidToken, nil)
 		return httpx.SendResponse(c, response)
 	}
 
 	tokenService := services.NewTokenService()
-	token, err := tokenService.ValidateToken(tokenID, constants.EmailVerificationToken)
+	token, err := tokenService.ValidateTokenByValue(tokenValue, constants.EmailVerificationToken)
 	if err != nil {
 		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
 		return httpx.SendResponse(c, response)
@@ -284,16 +283,9 @@ func ResetPassword(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	// Parse token ID
-	tokenID, err := uuid.Parse(input.Token)
-	if err != nil {
-		response := httpx.BadRequest(config.Messages.Auth.Error.InvalidToken, err)
-		return httpx.SendResponse(c, response)
-	}
-
-	// Validate token
+	// Validate token by value (no need to parse UUID)
 	tokenService := services.NewTokenService()
-	token, err := tokenService.ValidateToken(tokenID, constants.PasswordResetToken)
+	token, err := tokenService.ValidateTokenByValue(input.Token, constants.PasswordResetToken)
 	if err != nil {
 		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
 		return httpx.SendResponse(c, response)
@@ -357,22 +349,32 @@ func ChangePassword(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	user := c.Locals("user").(models.User)
+	// Get user ID from context and fetch fresh user data
+	userID := c.Locals("user").(models.User).ID
+	var user models.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		log.Printf("failed to fetch user for password change: %v", err)
+		response := httpx.InternalServerError(config.Messages.Server.Error.Internal, err)
+		return httpx.SendResponse(c, response)
+	}
 
 	// Verify old password
 	if !crypto.CheckPassword(input.OldPassword, user.Password) {
+		log.Printf("failed password change attempt for user %s: invalid old password", user.ID)
 		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidPassword)
 		return httpx.SendResponse(c, response)
 	}
 
 	// Prevent using the same password
 	if crypto.CheckPassword(input.NewPassword, user.Password) {
+		log.Printf("failed password change attempt for user %s: new password same as current", user.ID)
 		response := httpx.BadRequest(config.Messages.Auth.Error.SamePassword, nil)
 		return httpx.SendResponse(c, response)
 	}
 
 	// Validate new password strength
 	if err := helpers.ValidatePasswordStrength(input.NewPassword); err != nil {
+		log.Printf("failed password change attempt for user %s: password strength validation failed - %v", user.ID, err)
 		response := httpx.BadRequest(err.Error(), nil)
 		return httpx.SendResponse(c, response)
 	}
@@ -380,7 +382,7 @@ func ChangePassword(c *fiber.Ctx) error {
 	// Hash new password
 	hashedPassword, err := crypto.HashPassword(input.NewPassword)
 	if err != nil {
-		log.Printf("failed to hash password: %v", err)
+		log.Printf("failed to hash password for user %s: %v", user.ID, err)
 		response := httpx.InternalServerError(config.Messages.Server.Error.Internal, err)
 		return httpx.SendResponse(c, response)
 	}
@@ -391,6 +393,7 @@ func ChangePassword(c *fiber.Ctx) error {
 			return fmt.Errorf("failed to update password: %w", err)
 		}
 
+		// Revoke refresh tokens if concurrent logins are not allowed
 		if !config.Auth.Allow.ConcurrentLogins {
 			tokenService := services.NewTokenService()
 			if err := tokenService.RevokeAllUserTokens(user.ID, constants.RefreshToken); err != nil {
@@ -402,10 +405,13 @@ func ChangePassword(c *fiber.Ctx) error {
 	})
 
 	if err != nil {
-		log.Printf("failed to change password: %v", err)
+		log.Printf("failed to change password for user %s: %v", user.ID, err)
 		response := httpx.InternalServerError(config.Messages.Server.Error.Internal, err)
 		return httpx.SendResponse(c, response)
 	}
+
+	// Log successful password change
+	log.Printf("password changed successfully for user %s", user.ID)
 
 	response := httpx.OK(config.Messages.Auth.Success.PasswordChanged, nil)
 	return httpx.SendResponse(c, response)
@@ -584,16 +590,9 @@ func RefreshToken(c *fiber.Ctx) error {
 		return httpx.SendResponse(c, response)
 	}
 
-	// Parse refresh token ID
-	refreshTokenID, err := uuid.Parse(input.RefreshToken)
-	if err != nil {
-		response := httpx.BadRequest(config.Messages.Auth.Error.InvalidToken, err)
-		return httpx.SendResponse(c, response)
-	}
-
-	// Validate refresh token
+	// Validate refresh token by value (no need to parse UUID)
 	tokenService := services.NewTokenService()
-	refreshToken, err := tokenService.ValidateToken(refreshTokenID, constants.RefreshToken)
+	refreshToken, err := tokenService.ValidateTokenByValue(input.RefreshToken, constants.RefreshToken)
 	if err != nil {
 		response := httpx.Unauthorized(config.Messages.Auth.Error.InvalidToken)
 		return httpx.SendResponse(c, response)

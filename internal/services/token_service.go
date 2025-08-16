@@ -5,6 +5,8 @@ import (
 	"auth-api/internal/constants"
 	"auth-api/internal/database"
 	"auth-api/internal/models"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -28,6 +30,21 @@ func NewTokenService() *TokenService {
 func (s *TokenService) ValidateToken(tokenID uuid.UUID, tokenType constants.TokenType) (*models.Token, error) {
 	var token models.Token
 	err := s.db.Where("id = ? AND type = ?", tokenID, string(tokenType)).First(&token).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate token: %w", fmt.Errorf("token not found: %w", err))
+	}
+
+	if !token.IsValid() {
+		return nil, fmt.Errorf("failed to validate token: %w", fmt.Errorf("token is invalid or expired"))
+	}
+
+	return &token, nil
+}
+
+// ValidateTokenByValue validates a token by its actual value instead of UUID
+func (s *TokenService) ValidateTokenByValue(tokenValue string, tokenType constants.TokenType) (*models.Token, error) {
+	var token models.Token
+	err := s.db.Where("value = ? AND type = ?", tokenValue, string(tokenType)).First(&token).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate token: %w", fmt.Errorf("token not found: %w", err))
 	}
@@ -114,12 +131,18 @@ func (s *TokenService) CreateToken(user models.User, tokenType constants.TokenTy
 }
 
 func (s *TokenService) createToken(user models.User, tokenType constants.TokenType, expiry time.Duration, userAgent string, ip string) (*models.Token, error) {
+	tokenValue, err := s.generateTokenValue()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate token value: %w", err)
+	}
+
 	token := &models.Token{
 		UserID:    user.ID,
 		Type:      string(tokenType),
 		ExpiresAt: time.Now().Add(expiry),
 		UserAgent: userAgent,
 		IP:        ip,
+		Value:     tokenValue, // Store the actual token value
 	}
 
 	if err := s.db.Create(token).Error; err != nil {
@@ -199,4 +222,13 @@ func (s *TokenService) CreatePasswordResetToken(user models.User, userAgent stri
 func (s *TokenService) CleanupExpiredTokens() error {
 	return s.db.Where("expires_at < ? OR revoked_at IS NOT NULL", time.Now()).
 		Delete(&models.Token{}).Error
+}
+
+// generateTokenValue creates a cryptographically secure random token value
+func (s *TokenService) generateTokenValue() (string, error) {
+	bytes := make([]byte, 32) // 256 bits
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }

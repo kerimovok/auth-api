@@ -109,7 +109,7 @@ func (s *JWTService) GenerateTokenPair(user models.User, userAgent string, ip st
 
 	response := &TokenResponse{
 		AccessToken:  accessToken,
-		RefreshToken: refreshToken.ID.String(),
+		RefreshToken: refreshToken.Value,
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(s.accessTokenExpiry.Seconds()),
 	}
@@ -140,7 +140,7 @@ func (s *JWTService) RefreshTokenPair(oldRefreshToken *models.Token, userAgent s
 
 	response := &TokenResponse{
 		AccessToken:  accessToken,
-		RefreshToken: newRefreshToken.ID.String(),
+		RefreshToken: newRefreshToken.Value,
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(s.accessTokenExpiry.Seconds()),
 	}
