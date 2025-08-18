@@ -13,3 +13,7 @@ templates/*
 
 # DS_STORE
 .DS_Store
+
+config/auth.yaml
+config/mailer.yaml
+config/messages.yaml
