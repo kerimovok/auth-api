@@ -16,6 +16,7 @@ type Producer struct {
 	conn    *amqp.Connection
 	channel *amqp.Channel
 	mu      sync.RWMutex // Protect connection updates
+	config  *QueueConfig
 }
 
 func NewProducer() *Producer {
@@ -45,52 +46,18 @@ func NewProducer() *Producer {
 		log.Fatalf("Failed to open channel: %v", err)
 	}
 
-	// Declare exchange
-	err = ch.ExchangeDeclare(
-		"mailer", // name
-		"direct", // type
-		true,     // durable
-		false,    // auto-deleted
-		false,    // internal
-		false,    // no-wait
-		nil,      // arguments
-	)
-	if err != nil {
-		log.Fatalf("Failed to declare exchange: %v", err)
-	}
+	// Get queue configuration
+	queueConfig := DefaultQueueConfig()
 
-	// Declare queue with same arguments as consumer
-	_, err = ch.QueueDeclare(
-		"email_queue", // name
-		true,          // durable
-		false,         // delete when unused
-		false,         // exclusive
-		false,         // no-wait
-		amqp.Table{ // arguments for additional durability
-			"x-message-ttl":  int32(24 * 60 * 60 * 1000), // 24 hours TTL
-			"x-max-priority": int32(10),                  // Priority support
-			"x-overflow":     "drop-head",                // Drop oldest when full
-		},
-	)
-	if err != nil {
-		log.Fatalf("Failed to declare queue: %v", err)
-	}
-
-	// Bind queue to exchange
-	err = ch.QueueBind(
-		"email_queue", // queue name
-		"email",       // routing key
-		"mailer",      // exchange
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to bind queue: %v", err)
+	// Setup all queues and exchanges using shared configuration
+	if err := queueConfig.SetupAllQueues(ch); err != nil {
+		log.Fatalf("Failed to setup queues: %v", err)
 	}
 
 	producer := &Producer{
 		conn:    conn,
 		channel: ch,
+		config:  queueConfig,
 	}
 
 	// Setup connection recovery
@@ -118,10 +85,10 @@ func (p *Producer) PublishEmailTask(emailTask *EmailTask) error {
 
 	p.mu.RLock()
 	err = p.channel.PublishWithContext(ctx,
-		"mailer", // exchange
-		"email",  // routing key
-		false,    // mandatory
-		false,    // immediate
+		p.config.ExchangeName, // exchange
+		p.config.RoutingKey,   // routing key
+		false,                 // mandatory
+		false,                 // immediate
 		amqp.Publishing{
 			ContentType:  "application/json",
 			Body:         payload,
@@ -221,27 +188,9 @@ func (p *Producer) reconnect() {
 			continue
 		}
 
-		// Re-declare exchange and queue
-		if err := ch.ExchangeDeclare("mailer", "direct", true, false, false, false, nil); err != nil {
-			log.Printf("Failed to declare exchange: %v, retrying in 5 seconds...", err)
-			ch.Close()
-			conn.Close()
-			continue
-		}
-
-		if _, err := ch.QueueDeclare("email_queue", true, false, false, false, amqp.Table{
-			"x-message-ttl":  int32(24 * 60 * 60 * 1000), // 24 hours TTL
-			"x-max-priority": int32(10),                  // Priority support
-			"x-overflow":     "drop-head",                // Drop oldest when full
-		}); err != nil {
-			log.Printf("Failed to declare queue: %v, retrying in 5 seconds...", err)
-			ch.Close()
-			conn.Close()
-			continue
-		}
-
-		if err := ch.QueueBind("email_queue", "email", "mailer", false, nil); err != nil {
-			log.Printf("Failed to bind queue: %v, retrying in 5 seconds...", err)
+		// Re-setup all queues and exchanges using shared configuration
+		if err := p.config.SetupAllQueues(ch); err != nil {
+			log.Printf("Failed to setup queues: %v, retrying in 5 seconds...", err)
 			ch.Close()
 			conn.Close()
 			continue
